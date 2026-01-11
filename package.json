@@ -1,0 +1,17 @@
+{
+  "name": "effect_city",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "prepare": "effect-language-service patch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@effect/platform": "^0.94.1",
+    "effect": "^3.19.14"
+  },
+  "devDependencies": {
+    "@effect/language-service": "^0.64.1",
+    "typescript": "^5.9.3"
+  }
+}
