@@ -4,7 +4,10 @@
   "type": "module",
   "scripts": {
     "prepare": "effect-language-service patch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "demo:population": "bun run src/cli/population-demo.ts",
+    "demo:simulation": "bun run src/cli/simulation-demo.ts",
+    "demo:economy": "bun run src/cli/economy-demo.ts"
   },
   "dependencies": {
     "@effect/platform": "^0.94.1",
