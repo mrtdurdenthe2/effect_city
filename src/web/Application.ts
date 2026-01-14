@@ -5,7 +5,6 @@ import { Sizes } from "./services/Sizes.js"
 import { Camera } from "./services/Camera.js"
 import { SimulationRunner } from "./SimulationRunner.js"
 import { World } from "./world/World.js"
-import { OverlayUI } from "./ui/OverlayUI.js"
 
 export class Application {
   private static instance: Application | null = null
@@ -22,13 +21,10 @@ export class Application {
   readonly scene: Scene
   readonly world: World
 
-  // UI
-  readonly overlayUI!: OverlayUI
-
   private constructor(canvas: HTMLCanvasElement) {
     // Initialize services
     this.eventEmitter = new EventEmitter()
-    this.sizes = new Sizes(this.eventEmitter)
+    this.sizes = new Sizes(this.eventEmitter, canvas.parentElement ?? undefined)
     this.time = new Time(this.eventEmitter)
     this.simulation = new SimulationRunner(this.eventEmitter)
 
@@ -50,13 +46,6 @@ export class Application {
     // Initialize world
     this.world = new World(this)
 
-    // Initialize UI overlay
-    const uiContainer = document.getElementById("ui-overlay")
-    if (!uiContainer) {
-      throw new Error("UI overlay container not found")
-    }
-    this.overlayUI = new OverlayUI(uiContainer, this.eventEmitter, this.simulation)
-
     // Bind events
     this.bindEvents()
   }
@@ -69,6 +58,10 @@ export class Application {
       Application.instance = new Application(canvas)
     }
     return Application.instance
+  }
+
+  static createWithCanvas(canvas: HTMLCanvasElement): Application {
+    return new Application(canvas)
   }
 
   private bindEvents(): void {
@@ -109,7 +102,6 @@ export class Application {
     this.camera.dispose()
     this.sizes.dispose()
     this.world.dispose()
-    this.overlayUI.dispose()
     this.renderer.dispose()
   }
 }

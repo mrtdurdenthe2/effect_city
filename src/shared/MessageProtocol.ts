@@ -7,7 +7,8 @@ export const SerializedCell = Schema.Struct({
   contentType: Schema.Literal("empty", "road", "zone", "building"),
   zoneId: Schema.OptionFromNullOr(Schema.String),
   zoneType: Schema.OptionFromNullOr(Schema.Literal("residential", "commercial", "industrial")),
-  buildingId: Schema.OptionFromNullOr(Schema.String)
+  buildingId: Schema.OptionFromNullOr(Schema.String),
+  roadType: Schema.OptionFromNullOr(Schema.Literal("street", "avenue", "highway"))
 })
 export type SerializedCell = typeof SerializedCell.Type
 
@@ -77,7 +78,8 @@ export const CellUpdatedMessage = Schema.Struct({
   contentType: Schema.Literal("empty", "road", "zone", "building"),
   zoneType: Schema.OptionFromNullOr(Schema.Literal("residential", "commercial", "industrial")),
   zoneId: Schema.OptionFromNullOr(Schema.String),
-  buildingId: Schema.OptionFromNullOr(Schema.String)
+  buildingId: Schema.OptionFromNullOr(Schema.String),
+  roadType: Schema.OptionFromNullOr(Schema.Literal("street", "avenue", "highway"))
 })
 
 export const SimulationTickMessage = Schema.Struct({

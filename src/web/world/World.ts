@@ -48,7 +48,9 @@ export class World {
             message.y,
             message.contentType,
             // Extract zone type from Option
-            message.zoneType && "value" in message.zoneType ? message.zoneType.value : undefined
+            message.zoneType && "value" in message.zoneType ? message.zoneType.value : undefined,
+            // Extract road type from Option
+            message.roadType && "value" in message.roadType ? message.roadType.value : undefined
           )
         }
         break
@@ -73,7 +75,15 @@ export class World {
         }
       }
 
-      this.gridRenderer.updateCell(cell.x, cell.y, cell.contentType, zoneType)
+      // Extract road type from Option structure
+      let roadType: "street" | "avenue" | "highway" | undefined
+      if (cell.roadType && typeof cell.roadType === "object" && "_tag" in cell.roadType) {
+        if (cell.roadType._tag === "Some" && "value" in cell.roadType) {
+          roadType = cell.roadType.value as "street" | "avenue" | "highway"
+        }
+      }
+
+      this.gridRenderer.updateCell(cell.x, cell.y, cell.contentType, zoneType, roadType)
     }
   }
 

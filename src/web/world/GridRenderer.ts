@@ -21,6 +21,15 @@ const CELL_COLORS = {
   building: 0x888888
 } as const
 
+// Road type colors
+const ROAD_COLORS = {
+  street: 0x555555,  // Dark gray
+  avenue: 0x666666,  // Medium gray
+  highway: 0x777777  // Light gray
+} as const
+
+type RoadType = "street" | "avenue" | "highway"
+
 type ZoneType = "residential" | "commercial" | "industrial"
 type CellContentType = "empty" | "road" | "zone" | "building"
 
@@ -36,7 +45,7 @@ export class GridRenderer {
   private readonly buildings: InstancedMesh
 
   // Cell state tracking
-  private readonly cellStates: Map<string, { type: CellContentType; zoneType: ZoneType | undefined }>
+  private readonly cellStates: Map<string, { type: CellContentType; zoneType: ZoneType | undefined; roadType: RoadType | undefined }>
 
   // Helper matrices
   private readonly tempMatrix = new Matrix4()
@@ -98,7 +107,7 @@ export class GridRenderer {
 
         // Initialize cell state
         const key = `${x},${z}`
-        this.cellStates.set(key, { type: "empty", zoneType: undefined })
+        this.cellStates.set(key, { type: "empty", zoneType: undefined, roadType: undefined })
 
         index++
       }
@@ -114,7 +123,8 @@ export class GridRenderer {
     x: number,
     y: number, // Note: y in grid coordinates = z in Three.js
     contentType: CellContentType,
-    zoneType?: ZoneType
+    zoneType?: ZoneType,
+    roadType?: RoadType
   ): void {
     const key = `${x},${y}`
     const index = y * GRID_SIZE + x
@@ -125,13 +135,13 @@ export class GridRenderer {
     }
 
     // Update cell state
-    this.cellStates.set(key, { type: contentType, zoneType })
+    this.cellStates.set(key, { type: contentType, zoneType, roadType })
 
     // Determine cell color
     let color: number
     switch (contentType) {
       case "road":
-        color = CELL_COLORS.road
+        color = roadType ? ROAD_COLORS[roadType] : CELL_COLORS.road
         break
       case "zone":
         color = zoneType ? ZONE_COLORS[zoneType] : CELL_COLORS.empty

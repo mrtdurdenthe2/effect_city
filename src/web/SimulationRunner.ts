@@ -1,6 +1,7 @@
 import { Effect, Layer, Stream, Option } from "effect"
 import { GridService, GridServiceLive } from "../services/GridService.js"
 import { ZoneService, ZoneServiceLive } from "../services/ZoneService.js"
+import { RoadService, RoadServiceLive } from "../services/RoadService.js"
 import { SimulationService, SimulationLayer } from "../services/SimulationService.js"
 import { Clock, ClockLive } from "../core/Clock.js"
 import type { EventEmitter } from "./EventEmitter.js"
@@ -16,6 +17,7 @@ import type {
 const AppLayer = Layer.mergeAll(
   GridServiceLive,
   ZoneServiceLive.pipe(Layer.provide(GridServiceLive)),
+  RoadServiceLive.pipe(Layer.provide(GridServiceLive)),
   SimulationLayer,
   ClockLive
 )
@@ -31,6 +33,7 @@ export class SimulationRunner {
       console.log("Effect program starting...")
       const grid = yield* GridService
       const zone = yield* ZoneService
+      const road = yield* RoadService
       const simulation = yield* SimulationService
       const clock = yield* Clock
 
@@ -58,13 +61,15 @@ export class SimulationRunner {
           const z = zoneMap.get(cell.zoneId.value)
           if (z) zoneType = z.type
         }
+        const roadType = yield* road.getRoadType(cell.position)
         serializedCells.push({
           x: cell.position.x,
           y: cell.position.y,
           contentType: cell.contentType,
           zoneId: cell.zoneId,
           zoneType: zoneType ? Option.some(zoneType) : Option.none(),
-          buildingId: cell.buildingId
+          buildingId: cell.buildingId,
+          roadType
         })
       }
 
@@ -143,6 +148,7 @@ export class SimulationRunner {
                   if (event._tag === "CellUpdated") {
                     const zoneOpt = yield* zone.getZoneAt(event.position)
                     const zt = Option.isSome(zoneOpt) ? zoneOpt.value.type : undefined
+                    const rt = yield* road.getRoadType(event.position)
 
                     emitter.emit({
                       type: "server:message",
@@ -153,7 +159,8 @@ export class SimulationRunner {
                         contentType: event.cell.contentType,
                         zoneType: zt ? Option.some(zt) : Option.none(),
                         zoneId: event.cell.zoneId,
-                        buildingId: event.cell.buildingId
+                        buildingId: event.cell.buildingId,
+                        roadType: rt
                       }
                     })
                   }
