@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { StatsPanel } from "./StatsPanel.js"
+import { MetricsGraphPanel } from "./MetricsGraphPanel.js"
 import type { EventEmitter } from "../EventEmitter.js"
 import type { SimulationRunner } from "../SimulationRunner.js"
-import type { SerializedSimulationStats, ClockState, ServerMessage } from "../../shared/MessageProtocol.js"
+import type { SerializedSimulationStats, ClockState, ServerMessage, MetricsSnapshot } from "../../shared/MessageProtocol.js"
 
 interface OverlayProps {
   eventEmitter: EventEmitter
@@ -13,6 +14,9 @@ interface OverlayProps {
 const Overlay: React.FC<OverlayProps> = ({ eventEmitter, simulation }) => {
   const [stats, setStats] = useState<SerializedSimulationStats | null>(null)
   const [clock, setClock] = useState<ClockState | null>(null)
+  const [showGraphs, setShowGraphs] = useState(false)
+  const [metricsSnapshots, setMetricsSnapshots] = useState<MetricsSnapshot[]>([])
+  const [metricNames, setMetricNames] = useState<string[]>([])
 
   useEffect(() => {
     console.log("OverlayUI subscribing to events...")
@@ -29,6 +33,10 @@ const Overlay: React.FC<OverlayProps> = ({ eventEmitter, simulation }) => {
         setStats(message.stats)
       } else if (message.type === "clock_state") {
         setClock(message.clock)
+      } else if (message.type === "metrics_history") {
+        console.log("Received metrics history:", message.snapshots.length, "snapshots")
+        setMetricsSnapshots([...message.snapshots])
+        setMetricNames([...message.metricNames])
       }
     }
 
@@ -48,13 +56,37 @@ const Overlay: React.FC<OverlayProps> = ({ eventEmitter, simulation }) => {
     simulation.setSpeed(speed)
   }
 
+  const handleToggleGraphs = useCallback(() => {
+    console.log("Toggle graphs clicked, showGraphs:", showGraphs)
+    if (!showGraphs) {
+      // Request metrics history when opening the panel
+      console.log("Requesting metrics history...")
+      simulation.requestMetricsHistory(200)
+    }
+    setShowGraphs(prev => !prev)
+  }, [showGraphs, simulation])
+
+  const handleCloseGraphs = useCallback(() => {
+    setShowGraphs(false)
+  }, [])
+
   return (
-    <StatsPanel
-      stats={stats}
-      clock={clock}
-      onTogglePause={handleTogglePause}
-      onSetSpeed={handleSetSpeed}
-    />
+    <>
+      <StatsPanel
+        stats={stats}
+        clock={clock}
+        onTogglePause={handleTogglePause}
+        onSetSpeed={handleSetSpeed}
+        onToggleGraphs={handleToggleGraphs}
+      />
+      {showGraphs && (
+        <MetricsGraphPanel
+          snapshots={metricsSnapshots}
+          metricNames={metricNames}
+          onClose={handleCloseGraphs}
+        />
+      )}
+    </>
   )
 }
 

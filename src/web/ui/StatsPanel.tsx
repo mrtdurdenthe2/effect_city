@@ -6,13 +6,15 @@ interface StatsPanelProps {
   clock: ClockState | null
   onTogglePause: () => void
   onSetSpeed: (speed: 1 | 2 | 3) => void
+  onToggleGraphs: () => void
 }
 
 export const StatsPanel: React.FC<StatsPanelProps> = ({
   stats,
   clock,
   onTogglePause,
-  onSetSpeed
+  onSetSpeed,
+  onToggleGraphs
 }) => {
   if (!stats || !clock) {
     return (
@@ -126,6 +128,17 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({
           <span style={styles.value}>{stats.grid.buildingCells}</span>
         </div>
       </div>
+
+      {/* Metrics Graph Button */}
+      <button
+        style={styles.graphButton}
+        onClick={() => {
+          console.log("Button clicked!")
+          onToggleGraphs()
+        }}
+      >
+        View Metrics Graphs
+      </button>
     </div>
   )
 }
@@ -274,5 +287,18 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: "right",
     fontSize: 11,
     color: "#888"
+  },
+  graphButton: {
+    width: "100%",
+    padding: "10px 12px",
+    backgroundColor: "#2196f3",
+    border: "none",
+    borderRadius: 6,
+    color: "#fff",
+    cursor: "pointer",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginTop: 4,
+    transition: "background-color 0.2s"
   }
 }

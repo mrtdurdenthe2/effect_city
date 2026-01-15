@@ -92,11 +92,102 @@ export const ClockStateMessage = Schema.Struct({
   clock: ClockState
 })
 
+// Metrics snapshot for graphs
+export const MetricEntry = Schema.Struct({
+  name: Schema.String,
+  value: Schema.Number,
+  tags: Schema.Array(Schema.Struct({ key: Schema.String, value: Schema.String }))
+})
+export type MetricEntry = typeof MetricEntry.Type
+
+export const MetricsSnapshot = Schema.Struct({
+  tick: Schema.Number,
+  timestamp: Schema.Number,
+  metrics: Schema.Array(MetricEntry)
+})
+export type MetricsSnapshot = typeof MetricsSnapshot.Type
+
+export const MetricsHistoryMessage = Schema.Struct({
+  type: Schema.Literal("metrics_history"),
+  snapshots: Schema.Array(MetricsSnapshot),
+  metricNames: Schema.Array(Schema.String)
+})
+
+// Activity Events - Modular event system for city activity feed
+// Each event type is a tagged union member that can be extended
+
+// Business events
+export const BusinessCreatedEvent = Schema.TaggedStruct("BusinessCreated", {
+  businessId: Schema.String,
+  businessName: Schema.String,
+  businessType: Schema.Literal("retail", "office", "factory", "warehouse"),
+  size: Schema.Literal("small", "medium", "large"),
+  position: Schema.Struct({ x: Schema.Number, y: Schema.Number })
+})
+
+export const BusinessClosedEvent = Schema.TaggedStruct("BusinessClosed", {
+  businessId: Schema.String,
+  businessName: Schema.String
+})
+
+// Economy events
+export const EnteredDebtEvent = Schema.TaggedStruct("EnteredDebt", {
+  balance: Schema.Number
+})
+
+export const ExitedDebtEvent = Schema.TaggedStruct("ExitedDebt", {
+  balance: Schema.Number
+})
+
+export const BankruptEvent = Schema.TaggedStruct("Bankrupt", {})
+
+// Population events
+export const CitizensArrivedEvent = Schema.TaggedStruct("CitizensArrived", {
+  count: Schema.Number,
+  totalPopulation: Schema.Number
+})
+
+export const CitizensLeftEvent = Schema.TaggedStruct("CitizensLeft", {
+  count: Schema.Number,
+  totalPopulation: Schema.Number,
+  reason: Schema.Literal("unhappy", "homeless", "unemployed")
+})
+
+// Combined ActivityEvent union - add new event types here
+export const ActivityEvent = Schema.Union(
+  BusinessCreatedEvent,
+  BusinessClosedEvent,
+  EnteredDebtEvent,
+  ExitedDebtEvent,
+  BankruptEvent,
+  CitizensArrivedEvent,
+  CitizensLeftEvent
+)
+export type ActivityEvent = typeof ActivityEvent.Type
+
+// Activity event message - sent from server to client
+export const ActivityEventMessage = Schema.Struct({
+  type: Schema.Literal("activity_event"),
+  event: ActivityEvent,
+  tick: Schema.Number,
+  timestamp: Schema.Number
+})
+
+// Activity item for UI display - includes ID for React keys
+export interface ActivityItem {
+  id: string
+  event: ActivityEvent
+  tick: number
+  timestamp: number
+}
+
 export const ServerMessage = Schema.Union(
   InitialStateMessage,
   CellUpdatedMessage,
   SimulationTickMessage,
-  ClockStateMessage
+  ClockStateMessage,
+  MetricsHistoryMessage,
+  ActivityEventMessage
 )
 export type ServerMessage = typeof ServerMessage.Type
 
@@ -110,5 +201,10 @@ export const TogglePauseMessage = Schema.Struct({
   type: Schema.Literal("toggle_pause")
 })
 
-export const ClientMessage = Schema.Union(SetSpeedMessage, TogglePauseMessage)
+export const RequestMetricsMessage = Schema.Struct({
+  type: Schema.Literal("request_metrics"),
+  count: Schema.Number
+})
+
+export const ClientMessage = Schema.Union(SetSpeedMessage, TogglePauseMessage, RequestMetricsMessage)
 export type ClientMessage = typeof ClientMessage.Type

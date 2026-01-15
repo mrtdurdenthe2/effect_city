@@ -1,154 +1,204 @@
 "use client"
 
-import { CaretUp } from "@phosphor-icons/react/dist/csr/CaretUp"
-import { ArrowUpRight } from "@phosphor-icons/react/dist/csr/ArrowUpRight"
+import type { ActivityItem, ActivityEvent } from "../../shared/MessageProtocol.js"
 
-interface ActivityItem {
-  id: string
-  type: "info" | "alert"
+// ============================================================================
+// EVENT RENDERERS - Add new event type renderers here
+// Each renderer takes an ActivityEvent and returns the display config
+// ============================================================================
+
+interface EventDisplay {
+  type: "info" | "alert" | "success" | "warning"
+  icon: string
   title: string
   subtitle?: string
-  expanded?: boolean
-  timestamp?: string
-  logs?: string[]
+  color: string
 }
 
-const activityItems: ActivityItem[] = [
-  {
-    id: "1",
-    type: "info",
-    title: "A new business has been incorporated!",
-  },
-  {
-    id: "2",
-    type: "alert",
-    title: "Kai Wilson's car just crashed at 32 Effect Ave.",
-    subtitle: "Paramedics are on their way to 32 Effect Ave",
-    expanded: true,
-    timestamp: "15:03",
-    logs: [
-      "[INFO] BLEH BLEH BLEH BLEH",
-      "[INFO] BLEH BLEH BLEH BLEH",
-      "[INFO] BLEH BLEH BLEH BLEH",
-      "[INFO] BLEH BLEH BLEH BLEH",
-    ],
-  },
-]
+// Map event types to their display configuration
+// This is the main extension point - add new cases here for new event types
+function getEventDisplay(event: ActivityEvent): EventDisplay {
+  switch (event._tag) {
+    // Business events
+    case "BusinessCreated":
+      return {
+        type: "success",
+        icon: "🏢",
+        title: `${event.businessName} opened!`,
+        subtitle: `New ${event.size} ${event.businessType} at (${event.position.x}, ${event.position.y})`,
+        color: "#4caf50"
+      }
+    case "BusinessClosed":
+      return {
+        type: "warning",
+        icon: "🚫",
+        title: `${event.businessName} closed`,
+        subtitle: "Business has shut down",
+        color: "#ff9800"
+      }
 
-function InfoCard({ title }: { title: string }) {
+    // Economy events
+    case "EnteredDebt":
+      return {
+        type: "alert",
+        icon: "💸",
+        title: "City entered debt!",
+        subtitle: `Treasury balance: $${event.balance.toLocaleString()}`,
+        color: "#f44336"
+      }
+    case "ExitedDebt":
+      return {
+        type: "success",
+        icon: "💰",
+        title: "City out of debt!",
+        subtitle: `Treasury balance: $${event.balance.toLocaleString()}`,
+        color: "#4caf50"
+      }
+    case "Bankrupt":
+      return {
+        type: "alert",
+        icon: "💀",
+        title: "CITY BANKRUPT!",
+        subtitle: "The city has gone bankrupt",
+        color: "#d32f2f"
+      }
+
+    // Population events
+    case "CitizensArrived":
+      return {
+        type: "info",
+        icon: "👋",
+        title: `${event.count} citizen${event.count > 1 ? "s" : ""} moved in`,
+        subtitle: `Population: ${event.totalPopulation}`,
+        color: "#2196f3"
+      }
+    case "CitizensLeft":
+      return {
+        type: "warning",
+        icon: "👎",
+        title: `${event.count} citizen${event.count > 1 ? "s" : ""} left`,
+        subtitle: `Reason: ${event.reason} | Population: ${event.totalPopulation}`,
+        color: "#ff9800"
+      }
+  }
+}
+
+// Format timestamp for display
+function formatTime(timestamp: number): string {
+  const date = new Date(timestamp)
+  return date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  })
+}
+
+// ============================================================================
+// ACTIVITY CARD COMPONENT
+// Renders individual activity items with appropriate styling based on type
+// ============================================================================
+
+function ActivityCard({ item }: { item: ActivityItem }) {
+  const display = getEventDisplay(item.event)
+  const time = formatTime(item.timestamp)
+
+  // Get border color based on event type
+  const getBorderColor = () => {
+    switch (display.type) {
+      case "alert":
+        return "#f44336"
+      case "success":
+        return "#4caf50"
+      case "warning":
+        return "#ff9800"
+      default:
+        return "#2196f3"
+    }
+  }
+
+  // Get background based on event type
+  const getBackground = () => {
+    switch (display.type) {
+      case "alert":
+        return `repeating-linear-gradient(
+          -45deg,
+          transparent,
+          transparent 8px,
+          rgba(255, 0, 0, 0.05) 8px,
+          rgba(255, 0, 0, 0.05) 16px
+        )`
+      default:
+        return "white"
+    }
+  }
+
   return (
-    <div className="relative flex items-center bg-white border border-black/[0.09] rounded-md shadow-[0_2px_10px_rgba(0,0,0,0.01)] px-3 py-[7px]">
-      {/* Blue left indicator */}
-      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-[19px] bg-[#15BDFF] rounded-r-sm" />
-      <span className="text-[#161616] text-base pl-1">{title}</span>
+    <div
+      className="relative bg-white border border-black/[0.09] rounded-md shadow-[0_2px_10px_rgba(0,0,0,0.02)] overflow-hidden"
+      style={{ background: getBackground() }}
+    >
+      {/* Left indicator */}
+      <div
+        className="absolute left-0 top-0 bottom-0 w-1 rounded-l-md"
+        style={{ backgroundColor: getBorderColor() }}
+      />
+
+      <div className="px-4 py-3 pl-5">
+        {/* Header row */}
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{display.icon}</span>
+            <span className="text-[#161616] font-medium text-sm">{display.title}</span>
+          </div>
+          <span className="text-[#888] text-xs font-mono">Tick {item.tick}</span>
+        </div>
+
+        {/* Subtitle */}
+        {display.subtitle && (
+          <p className="text-[#686868] text-xs pl-7">{display.subtitle}</p>
+        )}
+
+        {/* Timestamp */}
+        <p className="text-[#aaa] text-[10px] pl-7 mt-1">{time}</p>
+      </div>
     </div>
   )
 }
 
-function AlertCard({
-  title,
-  subtitle,
-  timestamp,
-  logs,
-}: {
-  title: string
-  subtitle?: string | undefined
-  timestamp?: string | undefined
-  logs?: string[] | undefined
-}) {
+// ============================================================================
+// MAIN ACTIVITY PANEL COMPONENT
+// ============================================================================
+
+interface ActivityPanelProps {
+  items: ActivityItem[]
+}
+
+export function ActivityPanel({ items }: ActivityPanelProps) {
   return (
-    <div className="space-y-2">
-      {/* Context line with arrow icon */}
-      <div className="flex items-center gap-2 text-[#686868] text-xs">
-        <ArrowUpRight className="w-[13px] h-[13px]" />
-        <span>{title}</span>
+    <div className="w-full h-full bg-white border-l border-black/[0.08] flex flex-col">
+      {/* Header */}
+      <div className="px-6 py-4 flex-shrink-0">
+        <h2 className="text-2xl font-medium tracking-tight text-black">Activity</h2>
+        <p className="text-xs text-[#888] mt-1">
+          {items.length === 0 ? "Waiting for events..." : `${items.length} events`}
+        </p>
       </div>
 
-      {/* Subtitle */}
-      {subtitle && <p className="text-[#161616] text-base">{subtitle}</p>}
-
-      {/* Expanded alert card */}
-      <div className="relative bg-white border border-black/[0.09] rounded-md shadow-[0_2px_10px_rgba(0,0,0,0.01)] overflow-hidden">
-        {/* Red diagonal stripe pattern header */}
-        <div
-          className="relative px-[11px] py-1 border-black"
-          style={{
-            background: `repeating-linear-gradient(
-              -45deg,
-              transparent,
-              transparent 8px,
-              rgba(255, 0, 0, 0.07) 8px,
-              rgba(255, 0, 0, 0.07) 16px
-            ), linear-gradient(0deg, rgba(255, 0, 0, 0.07) 0%, rgba(255, 255, 255, 0.07) 68.57%)`,
-          }}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              {/* Red left indicator */}
-              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-[19px] bg-[#FF3636] rounded-r-sm" />
-              <span className="text-[#560000] text-base pl-1">
-                {"Kai Wilson's car just crashed at "}
-                <span className="underline font-mono font-medium tracking-tighter">32 Effect Ave.</span>
-              </span>
+      {/* Content area with gray background - scrollable */}
+      <div className="bg-[#FAFAFA] border-t border-black/[0.08] flex-1 overflow-y-auto">
+        <div className="p-4 space-y-3">
+          {items.length === 0 ? (
+            <div className="text-center py-8 text-[#888] text-sm">
+              <p>No activity yet</p>
+              <p className="text-xs mt-1">Events will appear here as the city evolves</p>
             </div>
-            <CaretUp className="w-4 h-4 text-[#7D7D7D]" />
-          </div>
-        </div>
-
-        {/* Content below stripes */}
-        <div className="px-4 py-3">
-          {/* Timestamp */}
-          {timestamp && <p className="text-[#272727] text-[13px]">{timestamp}</p>}
-
-          {/* Logs with fade effect */}
-          {logs && logs.length > 0 && (
-            <div className="relative mt-3">
-              <div className="space-y-0.5">
-                {logs.map((log, index) => (
-                  <p key={index} className="text-[#686868] text-[13px]">
-                    {log}
-                  </p>
-                ))}
-              </div>
-              {/* Fade gradient overlay */}
-              <div
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  background:
-                    "linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 20%, rgba(255, 255, 255, 0.7) 60%, rgba(255, 255, 255, 1) 100%)",
-                }}
-              />
-            </div>
+          ) : (
+            items.map((item) => (
+              <ActivityCard key={item.id} item={item} />
+            ))
           )}
         </div>
-      </div>
-    </div>
-  )
-}
-
-export function ActivityPanel() {
-  return (
-    <div className="w-full h-full bg-white border-l border-black/[0.08]">
-      {/* Header */}
-      <div className="px-6 py-4">
-        <h2 className="text-2xl font-medium tracking-tight text-black">Activity</h2>
-      </div>
-
-      {/* Content area with gray background */}
-      <div className="bg-[#FAFAFA] border-t border-black/[0.08] p-6 space-y-4 py-0">
-        {activityItems.map((item) =>
-          item.type === "info" ? (
-            <InfoCard key={item.id} title={item.title} />
-          ) : (
-            <AlertCard
-              key={item.id}
-              title={item.title}
-              subtitle={item.subtitle}
-              timestamp={item.timestamp}
-              logs={item.logs}
-            />
-          ),
-        )}
       </div>
     </div>
   )

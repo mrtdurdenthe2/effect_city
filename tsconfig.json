@@ -1,5 +1,5 @@
 {
-  "exclude": ["threejs_examples", "node_modules", "dist"],
+  "exclude": ["threejs_examples", "node_modules", "dist", "src/cli"],
   "compilerOptions": {
     // Build Performance
     "incremental": true,

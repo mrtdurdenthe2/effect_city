@@ -10,10 +10,11 @@ export class Sizes {
     private readonly eventEmitter: EventEmitter,
     container?: HTMLElement
   ) {
-    if (container) {
+    if (container && container.clientWidth > 0 && container.clientHeight > 0) {
       this.width = container.clientWidth
       this.height = container.clientHeight
     } else {
+      // Fallback to window dimensions if container has no size yet
       this.width = window.innerWidth
       this.height = window.innerHeight
     }

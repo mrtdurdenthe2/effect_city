@@ -1,17 +1,25 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import { createRoot } from "react-dom/client"
 import "./globals.css"
 import { ResizableLayout } from "./components/resizable-layout"
 import { ActivityPanel } from "./components/activity-panel"
 import { Application } from "./Application.js"
 import { StatsPanel } from "./ui/StatsPanel"
-import type { SerializedSimulationStats, ClockState, ServerMessage } from "../shared/MessageProtocol.js"
+import { MetricsGraphPanel } from "./ui/MetricsGraphPanel"
+import type { SerializedSimulationStats, ClockState, ServerMessage, MetricsSnapshot, ActivityItem } from "../shared/MessageProtocol.js"
 
-function ThreeCanvas() {
+// Max number of activity items to keep in the list
+const MAX_ACTIVITY_ITEMS = 100
+
+function ThreeCanvas({ onActivityEvent }: { onActivityEvent: (item: ActivityItem) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const appRef = useRef<Application | null>(null)
   const [stats, setStats] = useState<SerializedSimulationStats | null>(null)
   const [clock, setClock] = useState<ClockState | null>(null)
+  const [showGraphs, setShowGraphs] = useState(false)
+  const [metricsSnapshots, setMetricsSnapshots] = useState<MetricsSnapshot[]>([])
+  const [metricNames, setMetricNames] = useState<string[]>([])
+  const activityIdCounter = useRef(0)
 
   useEffect(() => {
     if (!canvasRef.current || appRef.current) return
@@ -29,6 +37,18 @@ function ThreeCanvas() {
         setStats(message.stats)
       } else if (message.type === "clock_state") {
         setClock(message.clock)
+      } else if (message.type === "metrics_history") {
+        console.log("Received metrics history:", message.snapshots.length, "snapshots")
+        setMetricsSnapshots([...message.snapshots])
+        setMetricNames([...message.metricNames])
+      } else if (message.type === "activity_event") {
+        activityIdCounter.current++
+        onActivityEvent({
+          id: `activity-${activityIdCounter.current}`,
+          event: message.event,
+          tick: message.tick,
+          timestamp: message.timestamp
+        })
       }
     }
 
@@ -44,7 +64,7 @@ function ThreeCanvas() {
       app.dispose()
       appRef.current = null
     }
-  }, [])
+  }, [onActivityEvent])
 
   const handleTogglePause = () => {
     appRef.current?.simulation.togglePause()
@@ -53,6 +73,19 @@ function ThreeCanvas() {
   const handleSetSpeed = (speed: 1 | 2 | 3) => {
     appRef.current?.simulation.setSpeed(speed)
   }
+
+  const handleToggleGraphs = useCallback(() => {
+    console.log("Toggle graphs clicked, showGraphs:", showGraphs)
+    if (!showGraphs) {
+      console.log("Requesting metrics history...")
+      appRef.current?.simulation.requestMetricsHistory(200)
+    }
+    setShowGraphs(prev => !prev)
+  }, [showGraphs])
+
+  const handleCloseGraphs = useCallback(() => {
+    setShowGraphs(false)
+  }, [])
 
   return (
     <div className="relative w-full h-full bg-[#1a1a2e]">
@@ -64,18 +97,39 @@ function ThreeCanvas() {
             clock={clock}
             onTogglePause={handleTogglePause}
             onSetSpeed={handleSetSpeed}
+            onToggleGraphs={handleToggleGraphs}
           />
         </div>
       </div>
+      {showGraphs && (
+        <MetricsGraphPanel
+          snapshots={metricsSnapshots}
+          metricNames={metricNames}
+          onClose={handleCloseGraphs}
+        />
+      )}
     </div>
   )
 }
 
 function App() {
+  const [activityItems, setActivityItems] = useState<ActivityItem[]>([])
+
+  const handleActivityEvent = useCallback((item: ActivityItem) => {
+    setActivityItems(prev => {
+      const newItems = [item, ...prev]
+      // Keep only the most recent items
+      if (newItems.length > MAX_ACTIVITY_ITEMS) {
+        return newItems.slice(0, MAX_ACTIVITY_ITEMS)
+      }
+      return newItems
+    })
+  }, [])
+
   return (
     <ResizableLayout
-      leftPanel={<ThreeCanvas />}
-      rightPanel={<ActivityPanel />}
+      leftPanel={<ThreeCanvas onActivityEvent={handleActivityEvent} />}
+      rightPanel={<ActivityPanel items={activityItems} />}
       defaultLeftWidth={70}
       minLeftWidth={40}
       minRightWidth={20}

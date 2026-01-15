@@ -1,16 +1,18 @@
-import { Context, Effect, Layer, Ref, PubSub, Queue, Scope } from "effect"
+import { Context, Effect, Layer, Ref, PubSub, Queue, Scope, Option } from "effect"
 import { Clock, ClockLive, type ClockState, type GameSpeed } from "../core/Clock.js"
 import { GameLoop, GameLoopLive } from "../core/GameLoop.js"
 import { PopulationService, PopulationServiceLive } from "./PopulationService.js"
 import { EconomyService, EconomyServiceLive, type BuildingCounts } from "./EconomyService.js"
-import { type PopulationStats } from "../domain/Citizen.js"
+import { BusinessService, BusinessServiceLive } from "./BusinessService.js"
+import { GridServiceLive } from "./GridService.js"
+import { ZoneServiceLive } from "./ZoneService.js"
+import { type PopulationStats, type CitizenId, BuildingId } from "../domain/Citizen.js"
 import { type Treasury, type IncomeReport, type ExpenseReport } from "../domain/Economy.js"
 
 // Simulation configuration
 export interface SimulationConfig {
-  readonly availableHomes: number
-  readonly availableJobs: number
-  readonly buildings: BuildingCounts
+  readonly residentialBuildingIds: ReadonlyArray<string>  // IDs of residential buildings for housing
+  readonly citizensPerHome: number  // How many citizens per residential building
   readonly utilityCosts: number
 }
 
@@ -70,16 +72,64 @@ export const SimulationServiceLive = Layer.effect(
     const gameLoop = yield* GameLoop
     const population = yield* PopulationService
     const economy = yield* EconomyService
+    const business = yield* BusinessService
 
     const configRef = yield* Ref.make<SimulationConfig>({
-      availableHomes: 10,
-      availableJobs: 5,
-      buildings: { residential: 5, commercial: 2, industrial: 1 },
-      utilityCosts: 50
+      residentialBuildingIds: [],
+      citizensPerHome: 4,
+      utilityCosts: 20
     })
+
+    // Track which citizens live in which buildings
+    const homeAssignmentsRef = yield* Ref.make<ReadonlyMap<string, number>>(new Map()) // buildingId -> citizen count
 
     const lastStatsRef = yield* Ref.make<SimulationStats | null>(null)
     const eventBus = yield* PubSub.unbounded<SimulationEvent>()
+
+    // Helper to find available home
+    const findAvailableHome = Effect.gen(function* () {
+      const config = yield* Ref.get(configRef)
+      const assignments = yield* Ref.get(homeAssignmentsRef)
+
+      for (const buildingId of config.residentialBuildingIds) {
+        const count = assignments.get(buildingId) ?? 0
+        if (count < config.citizensPerHome) {
+          return Option.some(buildingId)
+        }
+      }
+      return Option.none()
+    })
+
+    // Helper to assign citizen to home
+    const assignCitizenToHome = (citizenId: CitizenId) =>
+      Effect.gen(function* () {
+        const homeOpt = yield* findAvailableHome
+        if (Option.isNone(homeOpt)) return false
+
+        const buildingId = homeOpt.value as BuildingId
+        yield* population.assignHome(citizenId, buildingId)
+
+        yield* Ref.update(homeAssignmentsRef, (map) => {
+          const mutable = new Map(map)
+          const count = mutable.get(buildingId) ?? 0
+          mutable.set(buildingId, count + 1)
+          return mutable
+        })
+        return true
+      })
+
+    // Helper to assign citizen to job
+    const assignCitizenToJob = (citizenId: CitizenId) =>
+      Effect.gen(function* () {
+        const businessesWithJobs = yield* business.getBusinessesWithJobs
+        if (businessesWithJobs.length === 0) return false
+
+        // Pick first available business
+        const biz = businessesWithJobs[0]
+        yield* business.hireAt(biz.id)
+        yield* population.assignWorkplace(citizenId, biz.id as unknown as BuildingId)
+        return true
+      })
 
     // Core simulation tick logic
     const executeTick = Effect.gen(function* () {
@@ -103,25 +153,59 @@ export const SimulationServiceLive = Layer.effect(
         yield* PubSub.publish(eventBus, { _tag: "CitizensLeft", count: departures })
       }
 
-      // 2. Simulate population growth
-      const newArrivals = yield* population.simulateGrowth(config.availableHomes, config.availableJobs)
+      // 2. Simulate business growth (spawn new businesses)
+      yield* business.simulateGrowth
+
+      // 3. Calculate available homes and jobs
+      const assignments = yield* Ref.get(homeAssignmentsRef)
+      let availableHomes = 0
+      for (const buildingId of config.residentialBuildingIds) {
+        const count = assignments.get(buildingId) ?? 0
+        availableHomes += Math.max(0, config.citizensPerHome - count)
+      }
+      const availableJobs = yield* business.getAvailableJobs
+
+      // 4. Simulate population growth
+      const newArrivals = yield* population.simulateGrowth(availableHomes, availableJobs)
 
       if (newArrivals > 0) {
         yield* PubSub.publish(eventBus, { _tag: "CitizensArrived", count: newArrivals })
       }
 
-      // 3. Run economy tick (collect taxes, pay expenses)
+      // 5. Assign homes and jobs to homeless/unemployed citizens
+      const citizens = yield* population.getCitizens
+      for (const citizen of citizens) {
+        // Assign home if homeless
+        if (Option.isNone(citizen.homeId)) {
+          yield* assignCitizenToHome(citizen.id)
+        }
+        // Assign job if unemployed
+        if (citizen.employment === "unemployed") {
+          yield* assignCitizenToJob(citizen.id)
+        }
+      }
+
+      // 6. Run economy tick (collect taxes, pay expenses)
+      const businessStats = yield* business.getStats
       const populationStats = yield* population.getStats
+
+      // Calculate building counts from zones and businesses
+      const buildingCounts: BuildingCounts = {
+        residential: config.residentialBuildingIds.length,
+        commercial: businessStats.retailCount + businessStats.officeCount,
+        industrial: businessStats.factoryCount + businessStats.warehouseCount
+      }
+
       const { income, expenses } = yield* economy.tick(
         populationStats.total,
-        config.buildings,
+        buildingCounts,
         config.utilityCosts
       )
 
       yield* PubSub.publish(eventBus, { _tag: "TaxesCollected", income })
       yield* PubSub.publish(eventBus, { _tag: "ExpensesPaid", expenses })
 
-      // 4. Get final stats
+      // 7. Get final stats
       const finalPopStats = yield* population.getStats
       const treasury = yield* economy.getTreasury
 
@@ -157,7 +241,7 @@ export const SimulationServiceLive = Layer.effect(
       Ref.update(configRef, (current) => ({
         ...current,
         ...config,
-        buildings: config.buildings ?? current.buildings
+        residentialBuildingIds: config.residentialBuildingIds ?? current.residentialBuildingIds
       }))
 
     const getConfig = Ref.get(configRef)
@@ -202,17 +286,32 @@ export const SimulationServiceLive = Layer.effect(
   })
 )
 
+// Base services layer (Grid and Zone)
+const BaseServicesLayer = Layer.mergeAll(
+  GridServiceLive,
+  ZoneServiceLive.pipe(Layer.provide(GridServiceLive))
+)
+
+// Business layer depends on base services
+const BusinessLayer = BusinessServiceLive.pipe(
+  Layer.provide(BaseServicesLayer)
+)
+
 // Internal layer for SimulationService dependencies
 const SimulationDeps = Layer.mergeAll(
   GameLoopLive.pipe(Layer.provide(ClockLive)),
   ClockLive,
   PopulationServiceLive,
-  EconomyServiceLive
+  EconomyServiceLive,
+  BusinessLayer,
+  BaseServicesLayer
 )
 
-// Combined layer that provides SimulationService, PopulationService, and EconomyService
+// Combined layer that provides all simulation services
 export const SimulationLayer = Layer.mergeAll(
   SimulationServiceLive.pipe(Layer.provide(SimulationDeps)),
   PopulationServiceLive,
-  EconomyServiceLive
+  EconomyServiceLive,
+  BusinessLayer,
+  BaseServicesLayer
 )

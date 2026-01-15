@@ -246,7 +246,7 @@ export const EconomyServiceLive = Layer.effect(
         const budget = yield* Ref.get(budgetRef)
 
         // Calculate service costs based on population and funding level
-        const basePerCapita = 2 // Cost per citizen per service per tick
+        const basePerCapita = 0.5 // Cost per citizen per service per tick
         const police = Math.floor(population * basePerCapita * (budget.police / 100))
         const fire = Math.floor(population * basePerCapita * (budget.fire / 100))
         const health = Math.floor(population * basePerCapita * (budget.health / 100))
