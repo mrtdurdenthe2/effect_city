@@ -7,6 +7,8 @@ import {
   ExpenseReport,
   EconomyStats
 } from "../domain/Economy.js"
+import { captureActivityTrace, withServiceSpan } from "./ServiceTrace.js"
+import type { ServiceTraceMeta } from "./ServiceTrace.js"
 
 // Metrics for economy tracking
 const balanceGauge = Metric.gauge("economy.balance", {
@@ -28,12 +30,12 @@ const debtTicksCounter = Metric.counter("economy.debt_ticks", {
 
 // Events emitted by the economy service
 export type EconomyEvent =
-  | { readonly _tag: "TaxesCollected"; readonly income: IncomeReport }
-  | { readonly _tag: "ExpensesPaid"; readonly expenses: ExpenseReport }
-  | { readonly _tag: "BalanceChanged"; readonly oldBalance: number; readonly newBalance: number }
-  | { readonly _tag: "EnteredDebt" }
-  | { readonly _tag: "ExitedDebt" }
-  | { readonly _tag: "Bankrupt" }
+  | { readonly _tag: "TaxesCollected"; readonly income: IncomeReport; readonly trace: ServiceTraceMeta }
+  | { readonly _tag: "ExpensesPaid"; readonly expenses: ExpenseReport; readonly trace: ServiceTraceMeta }
+  | { readonly _tag: "BalanceChanged"; readonly oldBalance: number; readonly newBalance: number; readonly trace: ServiceTraceMeta }
+  | { readonly _tag: "EnteredDebt"; readonly trace: ServiceTraceMeta }
+  | { readonly _tag: "ExitedDebt"; readonly trace: ServiceTraceMeta }
+  | { readonly _tag: "Bankrupt"; readonly trace: ServiceTraceMeta }
 
 // Building counts for tax calculation
 export interface BuildingCounts {
@@ -98,12 +100,23 @@ export const EconomyServiceLive = Layer.effect(
       yield* Metric.set(expensesGauge, treasury.lastExpenses.total)
     })
 
-    const getBalance = Effect.map(Ref.get(treasuryRef), (t) => t.balance)
+    const getBalance = withServiceSpan(
+      "EconomyService",
+      "EconomyService.getBalance",
+      Effect.map(Ref.get(treasuryRef), (t) => t.balance)
+    )
 
-    const getTreasury = Ref.get(treasuryRef)
+    const getTreasury = withServiceSpan(
+      "EconomyService",
+      "EconomyService.getTreasury",
+      Ref.get(treasuryRef)
+    )
 
     const addFunds = (amount: number, _reason?: string) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "EconomyService",
+        "EconomyService.addFunds",
+        Effect.gen(function* () {
         const oldTreasury = yield* Ref.get(treasuryRef)
         const oldBalance = oldTreasury.balance
         const newBalance = oldBalance + amount
@@ -116,24 +129,31 @@ export const EconomyServiceLive = Layer.effect(
           })
         )
 
+        const trace = yield* captureActivityTrace("activity.BalanceChanged")
         yield* PubSub.publish(eventBus, {
           _tag: "BalanceChanged",
           oldBalance,
-          newBalance
+          newBalance,
+          trace
         })
 
         // Check if we exited debt
         const wasInDebt = yield* Ref.get(wasInDebtRef)
         if (wasInDebt && newBalance >= 0) {
           yield* Ref.set(wasInDebtRef, false)
-          yield* PubSub.publish(eventBus, { _tag: "ExitedDebt" })
+          const debtTrace = yield* captureActivityTrace("activity.ExitedDebt")
+          yield* PubSub.publish(eventBus, { _tag: "ExitedDebt", trace: debtTrace })
         }
 
         yield* updateMetrics
       })
+      )
 
     const deductFunds = (amount: number, _reason?: string) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "EconomyService",
+        "EconomyService.deductFunds",
+        Effect.gen(function* () {
         const oldTreasury = yield* Ref.get(treasuryRef)
         const oldBalance = oldTreasury.balance
         const newBalance = oldBalance - amount
@@ -146,17 +166,20 @@ export const EconomyServiceLive = Layer.effect(
           })
         )
 
+        const trace = yield* captureActivityTrace("activity.BalanceChanged")
         yield* PubSub.publish(eventBus, {
           _tag: "BalanceChanged",
           oldBalance,
-          newBalance
+          newBalance,
+          trace
         })
 
         // Check if we entered debt
         const wasInDebt = yield* Ref.get(wasInDebtRef)
         if (!wasInDebt && newBalance < 0) {
           yield* Ref.set(wasInDebtRef, true)
-          yield* PubSub.publish(eventBus, { _tag: "EnteredDebt" })
+          const debtTrace = yield* captureActivityTrace("activity.EnteredDebt")
+          yield* PubSub.publish(eventBus, { _tag: "EnteredDebt", trace: debtTrace })
         }
 
         // Track debt ticks
@@ -167,7 +190,8 @@ export const EconomyServiceLive = Layer.effect(
           // Bankrupt after 100 ticks in debt
           const ticksInDebt = yield* Ref.get(ticksInDebtRef)
           if (ticksInDebt >= 100) {
-            yield* PubSub.publish(eventBus, { _tag: "Bankrupt" })
+            const bankruptTrace = yield* captureActivityTrace("activity.Bankrupt")
+            yield* PubSub.publish(eventBus, { _tag: "Bankrupt", trace: bankruptTrace })
           }
         } else {
           yield* Ref.set(ticksInDebtRef, 0)
@@ -176,20 +200,32 @@ export const EconomyServiceLive = Layer.effect(
         yield* updateMetrics
         return true // Always allow deduction (can go into debt)
       })
+      )
 
-    const getTaxRates = Ref.get(taxRatesRef)
+    const getTaxRates = withServiceSpan(
+      "EconomyService",
+      "EconomyService.getTaxRates",
+      Ref.get(taxRatesRef)
+    )
 
     const setTaxRates = (rates: Partial<{ residential: number; commercial: number; industrial: number }>) =>
-      Ref.update(taxRatesRef, (current) =>
-        new TaxRates({
-          residential: rates.residential ?? current.residential,
-          commercial: rates.commercial ?? current.commercial,
-          industrial: rates.industrial ?? current.industrial
-        })
+      withServiceSpan(
+        "EconomyService",
+        "EconomyService.setTaxRates",
+        Ref.update(taxRatesRef, (current) =>
+          new TaxRates({
+            residential: rates.residential ?? current.residential,
+            commercial: rates.commercial ?? current.commercial,
+            industrial: rates.industrial ?? current.industrial
+          })
+        )
       )
 
     const collectTaxes = (population: number, buildings: BuildingCounts) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "EconomyService",
+        "EconomyService.collectTaxes",
+        Effect.gen(function* () {
         const rates = yield* Ref.get(taxRatesRef)
 
         // Calculate tax from each source
@@ -223,30 +259,43 @@ export const EconomyServiceLive = Layer.effect(
           new Treasury({ ...t, lastIncome: income })
         )
 
-        yield* PubSub.publish(eventBus, { _tag: "TaxesCollected", income })
+        const trace = yield* captureActivityTrace("activity.TaxesCollected")
+        yield* PubSub.publish(eventBus, { _tag: "TaxesCollected", income, trace })
 
         return income
       })
+      )
 
-    const getBudget = Ref.get(budgetRef)
+    const getBudget = withServiceSpan(
+      "EconomyService",
+      "EconomyService.getBudget",
+      Ref.get(budgetRef)
+    )
 
     const setBudget = (budget: Partial<{ police: number; fire: number; health: number; education: number; transportation: number }>) =>
-      Ref.update(budgetRef, (current) =>
-        new Budget({
-          police: budget.police ?? current.police,
-          fire: budget.fire ?? current.fire,
-          health: budget.health ?? current.health,
-          education: budget.education ?? current.education,
-          transportation: budget.transportation ?? current.transportation
-        })
+      withServiceSpan(
+        "EconomyService",
+        "EconomyService.setBudget",
+        Ref.update(budgetRef, (current) =>
+          new Budget({
+            police: budget.police ?? current.police,
+            fire: budget.fire ?? current.fire,
+            health: budget.health ?? current.health,
+            education: budget.education ?? current.education,
+            transportation: budget.transportation ?? current.transportation
+          })
+        )
       )
 
     const payExpenses = (population: number, utilityCosts: number) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "EconomyService",
+        "EconomyService.payExpenses",
+        Effect.gen(function* () {
         const budget = yield* Ref.get(budgetRef)
 
         // Calculate service costs based on population and funding level
-        const basePerCapita = 2 // Cost per citizen per service per tick
+        const basePerCapita = 0.5 // Cost per citizen per service per tick
         const police = Math.floor(population * basePerCapita * (budget.police / 100))
         const fire = Math.floor(population * basePerCapita * (budget.fire / 100))
         const health = Math.floor(population * basePerCapita * (budget.health / 100))
@@ -273,13 +322,18 @@ export const EconomyServiceLive = Layer.effect(
           new Treasury({ ...t, lastExpenses: expenses })
         )
 
-        yield* PubSub.publish(eventBus, { _tag: "ExpensesPaid", expenses })
+        const trace = yield* captureActivityTrace("activity.ExpensesPaid")
+        yield* PubSub.publish(eventBus, { _tag: "ExpensesPaid", expenses, trace })
 
         return expenses
       })
+      )
 
     const getStats = (employmentRate: number) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "EconomyService",
+        "EconomyService.getStats",
+        Effect.gen(function* () {
         const treasury = yield* Ref.get(treasuryRef)
         const taxRates = yield* Ref.get(taxRatesRef)
         const budget = yield* Ref.get(budgetRef)
@@ -293,9 +347,13 @@ export const EconomyServiceLive = Layer.effect(
           ticksInDebt
         })
       })
+      )
 
     const tick = (population: number, buildings: BuildingCounts, utilityCosts: number) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "EconomyService",
+        "EconomyService.tick",
+        Effect.gen(function* () {
         // 1. Collect taxes
         const income = yield* collectTaxes(population, buildings)
 
@@ -304,6 +362,7 @@ export const EconomyServiceLive = Layer.effect(
 
         return { income, expenses }
       })
+      )
 
     const subscribe = PubSub.subscribe(eventBus)
 

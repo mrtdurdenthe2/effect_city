@@ -1,4 +1,5 @@
 {
+  "exclude": ["threejs_examples", "node_modules", "dist", "src/cli"],
   "compilerOptions": {
     // Build Performance
     "incremental": true,
@@ -7,6 +8,8 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleDetection": "force",
+    "types": ["node", "bun"],
+    "jsx": "react-jsx",
 
     // Import Handling
     "verbatimModuleSyntax": true,

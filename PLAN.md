@@ -1,4 +1,3 @@
-# IGNORE FOR NOW
 # Effect City - Low-Poly City Simulator Plan
 
 A browser-based city simulator (Cities: Skylines style) using Three.js for rendering and Effect TypeScript for all game logic.

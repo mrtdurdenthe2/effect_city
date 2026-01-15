@@ -1,5 +1,6 @@
 import { Context, Effect, Layer, Ref, Array, Option, Random, Metric, MetricBoundaries } from "effect"
 import { Citizen, CitizenId, BuildingId, PopulationStats } from "../domain/Citizen.js"
+import { withServiceSpan } from "./ServiceTrace.js"
 
 // Metrics for population tracking
 const populationGauge = Metric.gauge("population.total", {
@@ -92,7 +93,10 @@ export const PopulationServiceLive = Layer.effect(
   Effect.gen(function* () {
     const citizensRef = yield* Ref.make<ReadonlyArray<Citizen>>([])
 
-    const getStats: Effect.Effect<PopulationStats> = Effect.gen(function* () {
+    const getStats: Effect.Effect<PopulationStats> = withServiceSpan(
+      "PopulationService",
+      "PopulationService.getStats",
+      Effect.gen(function* () {
       const citizens = yield* Ref.get(citizensRef)
       const total = citizens.length
       const employed = Array.filter(citizens, (c) => c.employment === "employed").length
@@ -111,24 +115,40 @@ export const PopulationServiceLive = Layer.effect(
         averageHappiness: avgHappiness
       })
     })
+    )
 
-    const getCitizens: Effect.Effect<ReadonlyArray<Citizen>> = Ref.get(citizensRef)
+    const getCitizens: Effect.Effect<ReadonlyArray<Citizen>> = withServiceSpan(
+      "PopulationService",
+      "PopulationService.getCitizens",
+      Ref.get(citizensRef)
+    )
 
     const getCitizen = (id: CitizenId): Effect.Effect<Option.Option<Citizen>> =>
-      Effect.map(Ref.get(citizensRef), (citizens) =>
-        Array.findFirst(citizens, (c) => c.id === id)
+      withServiceSpan(
+        "PopulationService",
+        "PopulationService.getCitizen",
+        Effect.map(Ref.get(citizensRef), (citizens) =>
+          Array.findFirst(citizens, (c) => c.id === id)
+        )
       )
 
     const addCitizen = (citizen: Citizen): Effect.Effect<void> =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "PopulationService",
+        "PopulationService.addCitizen",
+        Effect.gen(function* () {
         yield* Ref.update(citizensRef, (citizens) => [...citizens, citizen])
         yield* Metric.increment(citizensAddedCounter)
         const citizens = yield* Ref.get(citizensRef)
         yield* updateMetrics(citizens)
       })
+      )
 
     const removeCitizen = (id: CitizenId): Effect.Effect<void> =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "PopulationService",
+        "PopulationService.removeCitizen",
+        Effect.gen(function* () {
         yield* Ref.update(citizensRef, (citizens) =>
           Array.filter(citizens, (c) => c.id !== id)
         )
@@ -136,28 +156,44 @@ export const PopulationServiceLive = Layer.effect(
         const citizens = yield* Ref.get(citizensRef)
         yield* updateMetrics(citizens)
       })
+      )
 
     const updateCitizen = (id: CitizenId, update: (c: Citizen) => Citizen): Effect.Effect<void> =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "PopulationService",
+        "PopulationService.updateCitizen",
+        Effect.gen(function* () {
         yield* Ref.update(citizensRef, (citizens) =>
           Array.map(citizens, (c) => (c.id === id ? update(c) : c))
         )
         const citizens = yield* Ref.get(citizensRef)
         yield* updateMetrics(citizens)
       })
+      )
 
     const assignHome = (citizenId: CitizenId, buildingId: BuildingId): Effect.Effect<void> =>
-      updateCitizen(citizenId, (c) =>
-        new Citizen({ ...c, homeId: Option.some(buildingId) })
+      withServiceSpan(
+        "PopulationService",
+        "PopulationService.assignHome",
+        updateCitizen(citizenId, (c) =>
+          new Citizen({ ...c, homeId: Option.some(buildingId) })
+        )
       )
 
     const assignWorkplace = (citizenId: CitizenId, buildingId: BuildingId): Effect.Effect<void> =>
-      updateCitizen(citizenId, (c) =>
-        new Citizen({ ...c, workplaceId: Option.some(buildingId), employment: "employed" })
+      withServiceSpan(
+        "PopulationService",
+        "PopulationService.assignWorkplace",
+        updateCitizen(citizenId, (c) =>
+          new Citizen({ ...c, workplaceId: Option.some(buildingId), employment: "employed" })
+        )
       )
 
     const simulateGrowth = (availableHomes: number, availableJobs: number): Effect.Effect<number> =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "PopulationService",
+        "PopulationService.simulateGrowth",
+        Effect.gen(function* () {
         const citizens = yield* Ref.get(citizensRef)
         const stats = yield* getStats
 
@@ -193,8 +229,12 @@ export const PopulationServiceLive = Layer.effect(
 
         return added
       })
+      )
 
-    const tick: Effect.Effect<void> = Effect.gen(function* () {
+    const tick: Effect.Effect<void> = withServiceSpan(
+      "PopulationService",
+      "PopulationService.tick",
+      Effect.gen(function* () {
       const beforeCount = (yield* Ref.get(citizensRef)).length
 
       // Update happiness based on employment and housing
@@ -236,6 +276,7 @@ export const PopulationServiceLive = Layer.effect(
 
       yield* updateMetrics(afterCitizens)
     })
+    )
 
     return {
       getStats,
