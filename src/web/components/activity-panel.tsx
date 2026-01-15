@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import type { ActivityItem, ActivityEvent } from "../../shared/MessageProtocol.js"
 
 // ============================================================================
@@ -102,6 +103,7 @@ function formatTime(timestamp: number): string {
 function ActivityCard({ item }: { item: ActivityItem }) {
   const display = getEventDisplay(item.event)
   const time = formatTime(item.timestamp)
+  const [isExpanded, setIsExpanded] = useState(false)
 
   // Get border color based on event type
   const getBorderColor = () => {
@@ -144,24 +146,69 @@ function ActivityCard({ item }: { item: ActivityItem }) {
         style={{ backgroundColor: getBorderColor() }}
       />
 
-      <div className="px-4 py-3 pl-5">
-        {/* Header row */}
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">{display.icon}</span>
-            <span className="text-[#161616] font-medium text-sm">{display.title}</span>
+      <button
+        type="button"
+        onClick={() => setIsExpanded((prev) => !prev)}
+        className="w-full text-left bg-transparent border-0"
+        aria-expanded={isExpanded}
+      >
+        <div className="px-4 py-3 pl-5">
+          {/* Header row */}
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{display.icon}</span>
+              <span className="text-[#161616] font-medium text-sm">{display.title}</span>
+            </div>
+            <span className="text-[#888] text-xs font-mono">Tick {item.tick}</span>
           </div>
-          <span className="text-[#888] text-xs font-mono">Tick {item.tick}</span>
+
+          {/* Subtitle */}
+          {display.subtitle && (
+            <p className="text-[#686868] text-xs pl-7">{display.subtitle}</p>
+          )}
+
+          {/* Timestamp */}
+          <div className="flex items-center justify-between pl-7 mt-1">
+            <p className="text-[#aaa] text-[10px]">{time}</p>
+            <span className="text-[#999] text-[10px]">
+              {isExpanded ? "Hide details" : "Show details"}
+            </span>
+          </div>
         </div>
+      </button>
 
-        {/* Subtitle */}
-        {display.subtitle && (
-          <p className="text-[#686868] text-xs pl-7">{display.subtitle}</p>
-        )}
+      {isExpanded && (
+        <div className="px-4 pb-3 pl-5 border-t border-black/[0.06] bg-[#fcfcfc]">
+          <div className="pt-2 text-[11px] text-[#555]">
+            <div className="uppercase tracking-wide text-[10px] text-[#888]">Services</div>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {item.meta.services.length === 0 ? (
+                <span className="text-[#aaa]">None recorded</span>
+              ) : (
+                item.meta.services.map((service) => (
+                  <span
+                    key={service}
+                    className="px-2 py-[2px] rounded-full bg-white border border-black/[0.08] text-[#444]"
+                  >
+                    {service}
+                  </span>
+                ))
+              )}
+            </div>
 
-        {/* Timestamp */}
-        <p className="text-[#aaa] text-[10px] pl-7 mt-1">{time}</p>
-      </div>
+            <div className="mt-2 uppercase tracking-wide text-[10px] text-[#888]">Trace</div>
+            <div className="mt-1 font-mono text-[11px] text-[#666] space-y-0.5">
+              {item.meta.trace.length === 0 ? (
+                <div className="text-[#aaa]">No trace available</div>
+              ) : (
+                item.meta.trace.map((line, index) => (
+                  <div key={`${index}-${line}`}>{line}</div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

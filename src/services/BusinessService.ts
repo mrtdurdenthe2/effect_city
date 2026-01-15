@@ -11,13 +11,15 @@ import {
 } from "../domain/Business.js"
 import { ZoneService } from "./ZoneService.js"
 import { GridService } from "./GridService.js"
+import { captureActivityTrace, withServiceSpan } from "./ServiceTrace.js"
+import type { ServiceTraceMeta } from "./ServiceTrace.js"
 
 // Events emitted by the business service
 export type BusinessEvent =
-  | { readonly _tag: "BusinessCreated"; readonly business: Business }
-  | { readonly _tag: "BusinessClosed"; readonly businessId: BusinessId }
-  | { readonly _tag: "EmployeeHired"; readonly businessId: BusinessId }
-  | { readonly _tag: "EmployeeLeft"; readonly businessId: BusinessId }
+  | { readonly _tag: "BusinessCreated"; readonly business: Business; readonly trace: ServiceTraceMeta }
+  | { readonly _tag: "BusinessClosed"; readonly businessId: BusinessId; readonly trace: ServiceTraceMeta }
+  | { readonly _tag: "EmployeeHired"; readonly businessId: BusinessId; readonly trace: ServiceTraceMeta }
+  | { readonly _tag: "EmployeeLeft"; readonly businessId: BusinessId; readonly trace: ServiceTraceMeta }
 
 export class BusinessService extends Context.Tag("BusinessService")<
   BusinessService,
@@ -72,7 +74,10 @@ export const BusinessServiceLive = Layer.effect(
       zoneId: string,
       zoneType: "commercial" | "industrial"
     ) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "BusinessService",
+        "BusinessService.createBusiness",
+        Effect.gen(function* () {
         // Pick a random business type for this zone
         const possibleTypes = ZONE_TO_BUSINESS_TYPE[zoneType]
         const typeIndex = yield* Random.nextIntBetween(0, possibleTypes.length)
@@ -106,13 +111,18 @@ export const BusinessServiceLive = Layer.effect(
         // Place building on grid
         yield* gridService.placeBuilding(position, id)
 
-        yield* PubSub.publish(eventBus, { _tag: "BusinessCreated", business })
+        const trace = yield* captureActivityTrace("activity.BusinessCreated")
+        yield* PubSub.publish(eventBus, { _tag: "BusinessCreated", business, trace })
 
         return business
       })
+      )
 
     const closeBusiness = (id: BusinessId) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "BusinessService",
+        "BusinessService.closeBusiness",
+        Effect.gen(function* () {
         const businesses = yield* Ref.get(businessesRef)
         const business = businesses.get(id)
         if (!business) return
@@ -133,31 +143,48 @@ export const BusinessServiceLive = Layer.effect(
           return mutable
         })
 
-        yield* PubSub.publish(eventBus, { _tag: "BusinessClosed", businessId: id })
+        const trace = yield* captureActivityTrace("activity.BusinessClosed")
+        yield* PubSub.publish(eventBus, { _tag: "BusinessClosed", businessId: id, trace })
       })
+      )
 
     const getBusiness = (id: BusinessId) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "BusinessService",
+        "BusinessService.getBusiness",
+        Effect.gen(function* () {
         const businesses = yield* Ref.get(businessesRef)
         const business = businesses.get(id)
         return business ? Option.some(business) : Option.none()
       })
+      )
 
-    const getBusinesses = Effect.gen(function* () {
+    const getBusinesses = withServiceSpan(
+      "BusinessService",
+      "BusinessService.getBusinesses",
+      Effect.gen(function* () {
       const businesses = yield* Ref.get(businessesRef)
       return Array.from(businesses.values())
     })
+    )
 
     const getBusinessAt = (position: GridPosition) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "BusinessService",
+        "BusinessService.getBusinessAt",
+        Effect.gen(function* () {
         const positionToBusiness = yield* Ref.get(positionToBusinessRef)
         const businessId = positionToBusiness.get(position.toKey())
         if (!businessId) return Option.none()
         return yield* getBusiness(businessId)
       })
+      )
 
     const hireAt = (businessId: BusinessId) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "BusinessService",
+        "BusinessService.hireAt",
+        Effect.gen(function* () {
         const businesses = yield* Ref.get(businessesRef)
         const business = businesses.get(businessId)
         if (!business || business.isFull) return false
@@ -168,12 +195,17 @@ export const BusinessServiceLive = Layer.effect(
           return mutable
         })
 
-        yield* PubSub.publish(eventBus, { _tag: "EmployeeHired", businessId })
+        const trace = yield* captureActivityTrace("activity.EmployeeHired")
+        yield* PubSub.publish(eventBus, { _tag: "EmployeeHired", businessId, trace })
         return true
       })
+      )
 
     const removeEmployeeAt = (businessId: BusinessId) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "BusinessService",
+        "BusinessService.removeEmployeeAt",
+        Effect.gen(function* () {
         const businesses = yield* Ref.get(businessesRef)
         const business = businesses.get(businessId)
         if (!business || business.employeeCount <= 0) return false
@@ -184,11 +216,16 @@ export const BusinessServiceLive = Layer.effect(
           return mutable
         })
 
-        yield* PubSub.publish(eventBus, { _tag: "EmployeeLeft", businessId })
+        const trace = yield* captureActivityTrace("activity.EmployeeLeft")
+        yield* PubSub.publish(eventBus, { _tag: "EmployeeLeft", businessId, trace })
         return true
       })
+      )
 
-    const getAvailableJobs = Effect.gen(function* () {
+    const getAvailableJobs = withServiceSpan(
+      "BusinessService",
+      "BusinessService.getAvailableJobs",
+      Effect.gen(function* () {
       const businesses = yield* Ref.get(businessesRef)
       let total = 0
       for (const business of businesses.values()) {
@@ -196,13 +233,21 @@ export const BusinessServiceLive = Layer.effect(
       }
       return total
     })
+    )
 
-    const getBusinessesWithJobs = Effect.gen(function* () {
+    const getBusinessesWithJobs = withServiceSpan(
+      "BusinessService",
+      "BusinessService.getBusinessesWithJobs",
+      Effect.gen(function* () {
       const businesses = yield* Ref.get(businessesRef)
       return Arr.filter(Array.from(businesses.values()), (b) => b.availableJobs > 0)
     })
+    )
 
-    const simulateGrowth = Effect.gen(function* () {
+    const simulateGrowth = withServiceSpan(
+      "BusinessService",
+      "BusinessService.simulateGrowth",
+      Effect.gen(function* () {
       // Get all zones that could have businesses
       const commercialZones = yield* zoneService.getZonesByType("commercial")
       const industrialZones = yield* zoneService.getZonesByType("industrial")
@@ -249,8 +294,12 @@ export const BusinessServiceLive = Layer.effect(
 
       return created
     })
+    )
 
-    const getStats = Effect.gen(function* () {
+    const getStats = withServiceSpan(
+      "BusinessService",
+      "BusinessService.getStats",
+      Effect.gen(function* () {
       const businesses = yield* Ref.get(businessesRef)
 
       let retailCount = 0
@@ -290,6 +339,7 @@ export const BusinessServiceLive = Layer.effect(
         availableJobs: totalJobCapacity - totalEmployees
       })
     })
+    )
 
     const subscribe = PubSub.subscribe(eventBus)
 

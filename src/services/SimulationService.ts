@@ -8,6 +8,8 @@ import { GridServiceLive } from "./GridService.js"
 import { ZoneServiceLive } from "./ZoneService.js"
 import { type PopulationStats, type CitizenId, BuildingId } from "../domain/Citizen.js"
 import { type Treasury, type IncomeReport, type ExpenseReport } from "../domain/Economy.js"
+import { captureActivityTrace, withServiceSpan } from "./ServiceTrace.js"
+import type { ServiceTraceMeta } from "./ServiceTrace.js"
 
 // Simulation configuration
 export interface SimulationConfig {
@@ -20,8 +22,8 @@ export interface SimulationConfig {
 export type SimulationEvent =
   | { readonly _tag: "TickStarted"; readonly tickCount: number }
   | { readonly _tag: "TickCompleted"; readonly tickCount: number; readonly stats: SimulationStats }
-  | { readonly _tag: "CitizensArrived"; readonly count: number }
-  | { readonly _tag: "CitizensLeft"; readonly count: number }
+  | { readonly _tag: "CitizensArrived"; readonly tickCount: number; readonly count: number; readonly totalPopulation: number; readonly trace: ServiceTraceMeta }
+  | { readonly _tag: "CitizensLeft"; readonly tickCount: number; readonly count: number; readonly totalPopulation: number; readonly reason: "unhappy" | "homeless" | "unemployed"; readonly trace: ServiceTraceMeta }
   | { readonly _tag: "TaxesCollected"; readonly income: IncomeReport }
   | { readonly _tag: "ExpensesPaid"; readonly expenses: ExpenseReport }
 
@@ -132,7 +134,10 @@ export const SimulationServiceLive = Layer.effect(
       })
 
     // Core simulation tick logic
-    const executeTick = Effect.gen(function* () {
+    const executeTick = withServiceSpan(
+      "SimulationService",
+      "SimulationService.executeTick",
+      Effect.gen(function* () {
       const tickCount = yield* clock.getTickCount
       const config = yield* Ref.get(configRef)
 
@@ -150,7 +155,18 @@ export const SimulationServiceLive = Layer.effect(
       const departures = beforeStats.total - afterTickStats.total
 
       if (departures > 0) {
-        yield* PubSub.publish(eventBus, { _tag: "CitizensLeft", count: departures })
+        const reason = afterTickStats.homeless > 0 ? "homeless" as const
+          : afterTickStats.unemployed > afterTickStats.employed ? "unemployed" as const
+          : "unhappy" as const
+        const trace = yield* captureActivityTrace("activity.CitizensLeft")
+        yield* PubSub.publish(eventBus, {
+          _tag: "CitizensLeft",
+          tickCount,
+          count: departures,
+          totalPopulation: afterTickStats.total,
+          reason,
+          trace
+        })
       }
 
       // 2. Simulate business growth (spawn new businesses)
@@ -169,7 +185,15 @@ export const SimulationServiceLive = Layer.effect(
       const newArrivals = yield* population.simulateGrowth(availableHomes, availableJobs)
 
       if (newArrivals > 0) {
-        yield* PubSub.publish(eventBus, { _tag: "CitizensArrived", count: newArrivals })
+        const afterArrivals = yield* population.getStats
+        const trace = yield* captureActivityTrace("activity.CitizensArrived")
+        yield* PubSub.publish(eventBus, {
+          _tag: "CitizensArrived",
+          tickCount,
+          count: newArrivals,
+          totalPopulation: afterArrivals.total,
+          trace
+        })
       }
 
       // 5. Assign homes and jobs to homeless/unemployed citizens
@@ -222,6 +246,7 @@ export const SimulationServiceLive = Layer.effect(
 
       return stats
     })
+    )
 
     // Register tick handler with game loop
     yield* gameLoop.onTick(() => executeTick.pipe(Effect.asVoid))

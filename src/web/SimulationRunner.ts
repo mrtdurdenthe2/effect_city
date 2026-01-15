@@ -7,7 +7,6 @@ import { SimulationService, SimulationLayer } from "../services/SimulationServic
 import { MetricsService, MetricsServiceLive } from "../services/MetricsService.js"
 import { BusinessService } from "../services/BusinessService.js"
 import { EconomyService } from "../services/EconomyService.js"
-import { PopulationService } from "../services/PopulationService.js"
 import { Clock, ClockLive } from "../core/Clock.js"
 import type { EventEmitter } from "./EventEmitter.js"
 import type { Zone } from "../domain/Zone.js"
@@ -46,13 +45,15 @@ let metricsServiceRef: MetricsServiceApi | null = null
 const emitActivityEvent = (
   emitter: EventEmitter,
   event: ActivityEvent,
-  tick: number
+  tick: number,
+  meta: { services: string[]; trace: string[] }
 ): void => {
   emitter.emit({
     type: "server:message",
     data: {
       type: "activity_event",
       event,
+      meta,
       tick,
       timestamp: Date.now()
     }
@@ -76,7 +77,6 @@ export class SimulationRunner {
       const metricsService = yield* MetricsService
       const businessService = yield* BusinessService
       const economyService = yield* EconomyService
-      const populationService = yield* PopulationService
 
       // Store reference for external access
       metricsServiceRef = metricsService
@@ -307,9 +307,6 @@ export class SimulationRunner {
       })
       console.log("Initial state emitted")
 
-      // Track population for activity events
-      let lastPopulation = 0
-
       // Subscribe to events and emit them
       return yield* Effect.scoped(
         Effect.gen(function* () {
@@ -399,34 +396,29 @@ export class SimulationRunner {
                         stats: tickStats
                       }
                     })
-
-                    // Track population changes for activity events
-                    const currentPop = event.stats.population.total
-                    const diff = currentPop - lastPopulation
-
-                    if (diff > 0 && lastPopulation > 0) {
-                      // Citizens arrived
-                      emitActivityEvent(emitter, {
+                  } else if (event._tag === "CitizensArrived") {
+                    emitActivityEvent(
+                      emitter,
+                      {
                         _tag: "CitizensArrived",
-                        count: diff,
-                        totalPopulation: currentPop
-                      }, event.stats.tickCount)
-                    } else if (diff < 0 && lastPopulation > 0) {
-                      // Citizens left - determine reason based on stats
-                      const popStats = yield* populationService.getStats
-                      const reason = popStats.homeless > 0 ? "homeless" as const
-                        : popStats.unemployed > popStats.employed ? "unemployed" as const
-                        : "unhappy" as const
-
-                      emitActivityEvent(emitter, {
+                        count: event.count,
+                        totalPopulation: event.totalPopulation
+                      },
+                      event.tickCount,
+                      event.trace
+                    )
+                  } else if (event._tag === "CitizensLeft") {
+                    emitActivityEvent(
+                      emitter,
+                      {
                         _tag: "CitizensLeft",
-                        count: Math.abs(diff),
-                        totalPopulation: currentPop,
-                        reason
-                      }, event.stats.tickCount)
-                    }
-
-                    lastPopulation = currentPop
+                        count: event.count,
+                        totalPopulation: event.totalPopulation,
+                        reason: event.reason
+                      },
+                      event.tickCount,
+                      event.trace
+                    )
                   }
                 })
               )
@@ -464,21 +456,31 @@ export class SimulationRunner {
                   const tick = clockState.tickCount
 
                   if (event._tag === "BusinessCreated") {
-                    emitActivityEvent(emitter, {
-                      _tag: "BusinessCreated",
-                      businessId: event.business.id,
-                      businessName: event.business.name,
-                      businessType: event.business.type,
-                      size: event.business.size,
-                      position: { x: event.business.position.x, y: event.business.position.y }
-                    }, tick)
+                    emitActivityEvent(
+                      emitter,
+                      {
+                        _tag: "BusinessCreated",
+                        businessId: event.business.id,
+                        businessName: event.business.name,
+                        businessType: event.business.type,
+                        size: event.business.size,
+                        position: { x: event.business.position.x, y: event.business.position.y }
+                      },
+                      tick,
+                      event.trace
+                    )
                   } else if (event._tag === "BusinessClosed") {
                     const business = yield* businessService.getBusiness(event.businessId)
-                    emitActivityEvent(emitter, {
-                      _tag: "BusinessClosed",
-                      businessId: event.businessId,
-                      businessName: Option.isSome(business) ? business.value.name : "Unknown"
-                    }, tick)
+                    emitActivityEvent(
+                      emitter,
+                      {
+                        _tag: "BusinessClosed",
+                        businessId: event.businessId,
+                        businessName: Option.isSome(business) ? business.value.name : "Unknown"
+                      },
+                      tick,
+                      event.trace
+                    )
                   }
                 })
               )
@@ -495,19 +497,34 @@ export class SimulationRunner {
                   const treasury = yield* economyService.getTreasury
 
                   if (event._tag === "EnteredDebt") {
-                    emitActivityEvent(emitter, {
-                      _tag: "EnteredDebt",
-                      balance: treasury.balance
-                    }, tick)
+                    emitActivityEvent(
+                      emitter,
+                      {
+                        _tag: "EnteredDebt",
+                        balance: treasury.balance
+                      },
+                      tick,
+                      event.trace
+                    )
                   } else if (event._tag === "ExitedDebt") {
-                    emitActivityEvent(emitter, {
-                      _tag: "ExitedDebt",
-                      balance: treasury.balance
-                    }, tick)
+                    emitActivityEvent(
+                      emitter,
+                      {
+                        _tag: "ExitedDebt",
+                        balance: treasury.balance
+                      },
+                      tick,
+                      event.trace
+                    )
                   } else if (event._tag === "Bankrupt") {
-                    emitActivityEvent(emitter, {
-                      _tag: "Bankrupt"
-                    }, tick)
+                    emitActivityEvent(
+                      emitter,
+                      {
+                        _tag: "Bankrupt"
+                      },
+                      tick,
+                      event.trace
+                    )
                   }
                 })
               )

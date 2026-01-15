@@ -46,6 +46,7 @@ function ThreeCanvas({ onActivityEvent }: { onActivityEvent: (item: ActivityItem
         onActivityEvent({
           id: `activity-${activityIdCounter.current}`,
           event: message.event,
+          meta: message.meta,
           tick: message.tick,
           timestamp: message.timestamp
         })

@@ -169,6 +169,10 @@ export type ActivityEvent = typeof ActivityEvent.Type
 export const ActivityEventMessage = Schema.Struct({
   type: Schema.Literal("activity_event"),
   event: ActivityEvent,
+  meta: Schema.Struct({
+    services: Schema.Array(Schema.String),
+    trace: Schema.Array(Schema.String)
+  }),
   tick: Schema.Number,
   timestamp: Schema.Number
 })
@@ -177,6 +181,10 @@ export const ActivityEventMessage = Schema.Struct({
 export interface ActivityItem {
   id: string
   event: ActivityEvent
+  meta: {
+    services: string[]
+    trace: string[]
+  }
   tick: number
   timestamp: number
 }

@@ -2,6 +2,7 @@ import { Context, Effect, Layer, Ref, PubSub, Queue, Scope, Metric, Option } fro
 import { GridPosition } from "../domain/Grid.js"
 import { Zone, ZoneId, ZoneType, ZoneDensity, ZoneStats } from "../domain/Zone.js"
 import { GridService, GridServiceLive } from "./GridService.js"
+import { withServiceSpan } from "./ServiceTrace.js"
 
 // Metrics for zone tracking
 const totalZonesGauge = Metric.gauge("zones.total", {
@@ -166,26 +167,45 @@ export const ZoneServiceLive = Layer.effect(
 
     // Get zone
     const getZone = (id: ZoneId) =>
-      Effect.map(Ref.get(zonesRef), (zones) => Option.fromNullable(zones.get(id)))
+      withServiceSpan(
+        "ZoneService",
+        "ZoneService.getZone",
+        Effect.map(Ref.get(zonesRef), (zones) => Option.fromNullable(zones.get(id)))
+      )
 
-    const getZones = Effect.map(Ref.get(zonesRef), (zones) => Array.from(zones.values()))
+    const getZones = withServiceSpan(
+      "ZoneService",
+      "ZoneService.getZones",
+      Effect.map(Ref.get(zonesRef), (zones) => Array.from(zones.values()))
+    )
 
     const getZonesByType = (type: ZoneType) =>
-      Effect.map(Ref.get(zonesRef), (zones) =>
-        Array.from(zones.values()).filter((z) => z.type === type)
+      withServiceSpan(
+        "ZoneService",
+        "ZoneService.getZonesByType",
+        Effect.map(Ref.get(zonesRef), (zones) =>
+          Array.from(zones.values()).filter((z) => z.type === type)
+        )
       )
 
     const getZoneAt = (position: GridPosition) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "ZoneService",
+        "ZoneService.getZoneAt",
+        Effect.gen(function* () {
         const positionToZone = yield* Ref.get(positionToZoneRef)
         const zoneId = positionToZone.get(position.toKey())
         if (!zoneId) return Option.none()
         return yield* getZone(zoneId)
       })
+      )
 
     // Paint a single cell as a zone
     const paintZone = (position: GridPosition, type: ZoneType) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "ZoneService",
+        "ZoneService.paintZone",
+        Effect.gen(function* () {
         // Check if position already has a zone
         const existing = yield* getZoneAt(position)
         if (Option.isSome(existing)) {
@@ -237,10 +257,14 @@ export const ZoneServiceLive = Layer.effect(
         yield* updateMetrics
         return zone
       })
+      )
 
     // Paint an area with zones
     const paintZoneArea = (topLeft: GridPosition, bottomRight: GridPosition, type: ZoneType) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "ZoneService",
+        "ZoneService.paintZoneArea",
+        Effect.gen(function* () {
         const gridWidth = yield* grid.getWidth
         const gridHeight = yield* grid.getHeight
 
@@ -265,10 +289,14 @@ export const ZoneServiceLive = Layer.effect(
 
         return zones
       })
+      )
 
     // Clear zone at position
     const clearZone = (position: GridPosition) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "ZoneService",
+        "ZoneService.clearZone",
+        Effect.gen(function* () {
         const positionToZone = yield* Ref.get(positionToZoneRef)
         const zoneId = positionToZone.get(position.toKey())
 
@@ -312,10 +340,14 @@ export const ZoneServiceLive = Layer.effect(
 
         yield* updateMetrics
       })
+      )
 
     // Clear zone area
     const clearZoneArea = (topLeft: GridPosition, bottomRight: GridPosition) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "ZoneService",
+        "ZoneService.clearZoneArea",
+        Effect.gen(function* () {
         const gridWidth = yield* grid.getWidth
         const gridHeight = yield* grid.getHeight
 
@@ -330,10 +362,14 @@ export const ZoneServiceLive = Layer.effect(
           }
         }
       })
+      )
 
     // Set zone density
     const setDensity = (zoneId: ZoneId, density: ZoneDensity) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "ZoneService",
+        "ZoneService.setDensity",
+        Effect.gen(function* () {
         yield* Ref.update(zonesRef, (zones) => {
           const zone = zones.get(zoneId)
           if (!zone) return zones
@@ -343,13 +379,21 @@ export const ZoneServiceLive = Layer.effect(
         })
         yield* PubSub.publish(eventBus, { _tag: "ZoneDensityChanged", zoneId, density })
       })
+      )
 
     // Demand management
     const getDemand = (type: ZoneType) =>
-      Effect.map(Ref.get(demandRef), (demand) => demand[type])
+      withServiceSpan(
+        "ZoneService",
+        "ZoneService.getDemand",
+        Effect.map(Ref.get(demandRef), (demand) => demand[type])
+      )
 
     const setDemand = (type: ZoneType, newDemand: number) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "ZoneService",
+        "ZoneService.setDemand",
+        Effect.gen(function* () {
         const clampedDemand = Math.max(0, Math.min(100, newDemand))
         yield* Ref.update(demandRef, (demand) => ({
           ...demand,
@@ -358,19 +402,31 @@ export const ZoneServiceLive = Layer.effect(
         yield* PubSub.publish(eventBus, { _tag: "DemandChanged", zoneType: type, demand: clampedDemand })
         yield* updateMetrics
       })
+      )
 
     // Queries
     const hasZone = (position: GridPosition) =>
-      Effect.map(Ref.get(positionToZoneRef), (map) => map.has(position.toKey()))
+      withServiceSpan(
+        "ZoneService",
+        "ZoneService.hasZone",
+        Effect.map(Ref.get(positionToZoneRef), (map) => map.has(position.toKey()))
+      )
 
     const getZoneType = (position: GridPosition) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "ZoneService",
+        "ZoneService.getZoneType",
+        Effect.gen(function* () {
         const zone = yield* getZoneAt(position)
         return Option.map(zone, (z) => z.type)
       })
+      )
 
     const canBuildAt = (position: GridPosition) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "ZoneService",
+        "ZoneService.canBuildAt",
+        Effect.gen(function* () {
         const zone = yield* getZoneAt(position)
         if (Option.isNone(zone)) return false
 
@@ -380,9 +436,13 @@ export const ZoneServiceLive = Layer.effect(
         const hasRoad = yield* grid.hasRoadAccess(position)
         return hasRoad
       })
+      )
 
     const getAvailableCells = (zoneId: ZoneId) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "ZoneService",
+        "ZoneService.getAvailableCells",
+        Effect.gen(function* () {
         const zones = yield* Ref.get(zonesRef)
         const zone = zones.get(zoneId)
         if (!zone) return []
@@ -399,9 +459,13 @@ export const ZoneServiceLive = Layer.effect(
         }
         return available
       })
+      )
 
     // Statistics
-    const getStats = Effect.gen(function* () {
+    const getStats = withServiceSpan(
+      "ZoneService",
+      "ZoneService.getStats",
+      Effect.gen(function* () {
       const zones = yield* Ref.get(zonesRef)
       const demand = yield* Ref.get(demandRef)
 
@@ -442,9 +506,13 @@ export const ZoneServiceLive = Layer.effect(
         industrialDemand: demand.industrial
       })
     })
+    )
 
     const getCellCountByType = (type: ZoneType) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "ZoneService",
+        "ZoneService.getCellCountByType",
+        Effect.gen(function* () {
         const zones = yield* Ref.get(zonesRef)
         let count = 0
         for (const zone of zones.values()) {
@@ -454,9 +522,13 @@ export const ZoneServiceLive = Layer.effect(
         }
         return count
       })
+      )
 
     // Simulation tick - adjust demand based on conditions
-    const tick = Effect.gen(function* () {
+    const tick = withServiceSpan(
+      "ZoneService",
+      "ZoneService.tick",
+      Effect.gen(function* () {
       const stats = yield* getStats
 
       // Simple demand calculation:
@@ -506,6 +578,7 @@ export const ZoneServiceLive = Layer.effect(
 
       yield* updateMetrics
     })
+    )
 
     const subscribe = PubSub.subscribe(eventBus)
 

@@ -6,6 +6,7 @@ import {
   DEFAULT_GRID_WIDTH,
   DEFAULT_GRID_HEIGHT
 } from "../domain/Grid.js"
+import { withServiceSpan } from "./ServiceTrace.js"
 
 // Metrics for grid tracking
 const totalCellsGauge = Metric.gauge("grid.cells.total", {
@@ -179,20 +180,39 @@ export const GridServiceLive = Layer.effect(
       yield* Metric.set(buildingCellsGauge, buildings)
     })
 
-    const getWidth = Effect.succeed(width)
-    const getHeight = Effect.succeed(height)
+    const getWidth = withServiceSpan(
+      "GridService",
+      "GridService.getWidth",
+      Effect.succeed(width)
+    )
+    const getHeight = withServiceSpan(
+      "GridService",
+      "GridService.getHeight",
+      Effect.succeed(height)
+    )
 
     const getCell = (position: GridPosition) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "GridService",
+        "GridService.getCell",
+        Effect.gen(function* () {
         const cells = yield* Ref.get(cellsRef)
         const cell = cells.get(position.toKey())
         return cell ?? GridCell.empty(position)
       })
+      )
 
-    const getCells = Ref.get(cellsRef)
+    const getCells = withServiceSpan(
+      "GridService",
+      "GridService.getCells",
+      Ref.get(cellsRef)
+    )
 
     const getCellsInArea = (topLeft: GridPosition, bottomRight: GridPosition) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "GridService",
+        "GridService.getCellsInArea",
+        Effect.gen(function* () {
         const cells = yield* Ref.get(cellsRef)
         const result: GridCell[] = []
 
@@ -203,14 +223,22 @@ export const GridServiceLive = Layer.effect(
 
         return result
       })
+      )
 
     const isValidPosition = (position: GridPosition) =>
-      Effect.succeed(
-        position.x >= 0 && position.x < width && position.y >= 0 && position.y < height
+      withServiceSpan(
+        "GridService",
+        "GridService.isValidPosition",
+        Effect.succeed(
+          position.x >= 0 && position.x < width && position.y >= 0 && position.y < height
+        )
       )
 
     const updateCell = (position: GridPosition, update: (cell: GridCell) => GridCell) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "GridService",
+        "GridService.updateCell",
+        Effect.gen(function* () {
         const valid = yield* isValidPosition(position)
         if (!valid) return
 
@@ -226,15 +254,23 @@ export const GridServiceLive = Layer.effect(
         yield* PubSub.publish(eventBus, { _tag: "CellUpdated", position, cell })
         yield* updateMetrics
       })
+      )
 
     const placeRoad = (position: GridPosition) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "GridService",
+        "GridService.placeRoad",
+        Effect.gen(function* () {
         yield* updateCell(position, (cell) => cell.withRoad())
         yield* PubSub.publish(eventBus, { _tag: "RoadPlaced", position })
       })
+      )
 
     const removeRoad = (position: GridPosition) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "GridService",
+        "GridService.removeRoad",
+        Effect.gen(function* () {
         const cell = yield* getCell(position)
         if (cell.hasRoad) {
           yield* updateCell(position, (c) =>
@@ -247,18 +283,26 @@ export const GridServiceLive = Layer.effect(
           yield* PubSub.publish(eventBus, { _tag: "RoadRemoved", position })
         }
       })
+      )
 
     const paintZone = (position: GridPosition, zoneId: string) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "GridService",
+        "GridService.paintZone",
+        Effect.gen(function* () {
         const cell = yield* getCell(position)
         if (!cell.hasRoad) {
           yield* updateCell(position, (c) => c.withZone(zoneId))
           yield* PubSub.publish(eventBus, { _tag: "ZonePainted", position, zoneId })
         }
       })
+      )
 
     const clearZone = (position: GridPosition) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "GridService",
+        "GridService.clearZone",
+        Effect.gen(function* () {
         const cell = yield* getCell(position)
         if (cell.isZoned() && !cell.hasBuilding()) {
           yield* updateCell(position, (c) =>
@@ -271,18 +315,26 @@ export const GridServiceLive = Layer.effect(
           yield* PubSub.publish(eventBus, { _tag: "ZoneCleared", position })
         }
       })
+      )
 
     const placeBuilding = (position: GridPosition, buildingId: string) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "GridService",
+        "GridService.placeBuilding",
+        Effect.gen(function* () {
         const cell = yield* getCell(position)
         if (cell.isZoned() && !cell.hasBuilding()) {
           yield* updateCell(position, (c) => c.withBuilding(buildingId))
           yield* PubSub.publish(eventBus, { _tag: "BuildingPlaced", position, buildingId })
         }
       })
+      )
 
     const removeBuilding = (position: GridPosition) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "GridService",
+        "GridService.removeBuilding",
+        Effect.gen(function* () {
         const cell = yield* getCell(position)
         if (cell.hasBuilding()) {
           yield* updateCell(position, (c) =>
@@ -295,15 +347,23 @@ export const GridServiceLive = Layer.effect(
           yield* PubSub.publish(eventBus, { _tag: "BuildingRemoved", position })
         }
       })
+      )
 
     const clearCell = (position: GridPosition) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "GridService",
+        "GridService.clearCell",
+        Effect.gen(function* () {
         yield* updateCell(position, (c) => c.clear())
         yield* PubSub.publish(eventBus, { _tag: "CellCleared", position })
       })
+      )
 
     const getNeighbors = (position: GridPosition): Effect.Effect<ReadonlyArray<GridCell>> =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "GridService",
+        "GridService.getNeighbors",
+        Effect.gen(function* () {
         const neighborPositions = position.neighbors()
         const cells = yield* Ref.get(cellsRef)
         return Arr.filterMap(neighborPositions, (pos) => {
@@ -314,20 +374,32 @@ export const GridServiceLive = Layer.effect(
           return cell ? Option.some(cell) : Option.none()
         })
       })
+      )
 
     const getRoadNeighbors = (position: GridPosition) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "GridService",
+        "GridService.getRoadNeighbors",
+        Effect.gen(function* () {
         const neighbors = yield* getNeighbors(position)
         return Arr.filter(neighbors, (cell) => cell.hasRoad)
       })
+      )
 
     const hasRoadAccess = (position: GridPosition) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "GridService",
+        "GridService.hasRoadAccess",
+        Effect.gen(function* () {
         const roadNeighbors = yield* getRoadNeighbors(position)
         return roadNeighbors.length > 0
       })
+      )
 
-    const getStats = Effect.gen(function* () {
+    const getStats = withServiceSpan(
+      "GridService",
+      "GridService.getStats",
+      Effect.gen(function* () {
       const cells = yield* Ref.get(cellsRef)
       let emptyCells = 0
       let roadCells = 0
@@ -351,16 +423,24 @@ export const GridServiceLive = Layer.effect(
         buildingCells
       })
     })
+    )
 
     const placeRoadLine = (start: GridPosition, end: GridPosition) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "GridService",
+        "GridService.placeRoadLine",
+        Effect.gen(function* () {
         const positions = getLinePositions(start, end, width, height)
         yield* Effect.forEach(positions, placeRoad, { discard: true })
         return positions
       })
+      )
 
     const paintZoneArea = (topLeft: GridPosition, bottomRight: GridPosition, zoneId: string) =>
-      Effect.gen(function* () {
+      withServiceSpan(
+        "GridService",
+        "GridService.paintZoneArea",
+        Effect.gen(function* () {
         const painted: GridPosition[] = []
 
         for (const pos of iterateArea(topLeft, bottomRight, width, height)) {
@@ -373,6 +453,7 @@ export const GridServiceLive = Layer.effect(
 
         return painted
       })
+      )
 
     const subscribe = PubSub.subscribe(eventBus)
 
