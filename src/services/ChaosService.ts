@@ -13,6 +13,7 @@ import type { Citizen } from "../domain/Citizen.js"
 import { withServiceSpan, captureActivityTrace, type ServiceTraceMeta } from "./ServiceTrace.js"
 import { PopulationService } from "./PopulationService.js"
 import { RoadService } from "./RoadService.js"
+import { GridService } from "./GridService.js"
 
 // Metrics for chaos tracking
 const chaosEventsCounter = Metric.counter("chaos.events.total", {
@@ -121,6 +122,7 @@ export const ChaosServiceLive = Layer.effect(
   Effect.gen(function* () {
     const populationService = yield* PopulationService
     const roadService = yield* RoadService
+    const gridService = yield* GridService
 
     const configRef = yield* Ref.make<ChaosConfig>(defaultChaosConfig)
     const eventsRef = yield* Ref.make<ReadonlyArray<ChaosEvent>>([])
@@ -143,7 +145,82 @@ export const ChaosServiceLive = Layer.effect(
       return { position: { x: road.x, y: road.y }, roadType }
     })
 
-    // Helper to get a random city position
+    // Helper to get a random building position with its residents
+    const getRandomBuildingWithResidents = Effect.gen(function* () {
+      const cells = yield* gridService.getCells
+      const allCitizens = yield* populationService.getCitizens
+
+      // Get all cells with buildings
+      const buildingCells = Array.filter(
+        [...cells.values()],
+        (cell) => cell.hasBuilding()
+      )
+
+      if (buildingCells.length === 0) {
+        // Fallback to random position with no residents
+        const x = yield* Random.nextIntBetween(20, 50)
+        const y = yield* Random.nextIntBetween(20, 50)
+        return { position: { x, y }, buildingId: O.none<string>(), residents: [] as ReadonlyArray<Citizen> }
+      }
+
+      // Pick a random building
+      const idx = yield* Random.nextIntBetween(0, buildingCells.length)
+      const buildingCell = buildingCells[idx]
+      const buildingId = buildingCell.buildingId
+
+      // Find residents of this building
+      const residents = O.isSome(buildingId)
+        ? Array.filter(allCitizens, (c) => O.isSome(c.homeId) && c.homeId.value === buildingId.value)
+        : []
+
+      return {
+        position: { x: buildingCell.position.x, y: buildingCell.position.y },
+        buildingId,
+        residents
+      }
+    })
+
+    // Helper to get a random occupied building (one with residents)
+    const getRandomOccupiedBuilding = Effect.gen(function* () {
+      const cells = yield* gridService.getCells
+      const allCitizens = yield* populationService.getCitizens
+
+      // Get all cells with buildings
+      const buildingCells = Array.filter(
+        [...cells.values()],
+        (cell) => cell.hasBuilding()
+      )
+
+      // Find buildings that have residents
+      const occupiedBuildings = Array.filter(buildingCells, (cell) => {
+        if (!O.isSome(cell.buildingId)) return false
+        const bId = cell.buildingId.value
+        return allCitizens.some((c) => O.isSome(c.homeId) && c.homeId.value === bId)
+      })
+
+      if (occupiedBuildings.length === 0) {
+        // Fallback to any building
+        return yield* getRandomBuildingWithResidents
+      }
+
+      // Pick a random occupied building
+      const idx = yield* Random.nextIntBetween(0, occupiedBuildings.length)
+      const buildingCell = occupiedBuildings[idx]
+      const buildingId = buildingCell.buildingId
+
+      // Get residents
+      const residents = O.isSome(buildingId)
+        ? Array.filter(allCitizens, (c) => O.isSome(c.homeId) && c.homeId.value === buildingId.value)
+        : []
+
+      return {
+        position: { x: buildingCell.position.x, y: buildingCell.position.y },
+        buildingId,
+        residents
+      }
+    })
+
+    // Helper to get a random city position (fallback)
     const getRandomCityPosition = Effect.gen(function* () {
       const x = yield* Random.nextIntBetween(20, 50)
       const y = yield* Random.nextIntBetween(20, 50)
@@ -161,13 +238,47 @@ export const ChaosServiceLive = Layer.effect(
         Effect.gen(function* () {
           const id = yield* generateEventId
           const severity = yield* rollSeverity
-          const stats = yield* populationService.getStats
-          const affectedCount = yield* getAffectedCount(severity, stats.total)
           const happinessImpact = getHappinessImpact(severity)
 
-          // Get all citizens and select random ones to be affected
-          const allCitizens = yield* populationService.getCitizens
-          const selectedCitizens = yield* selectRandomCitizens(allCitizens, affectedCount)
+          // Get position, road type, and affected citizens based on event type
+          let position: { x: number; y: number }
+          let roadType: O.Option<"street" | "avenue" | "highway"> = O.none()
+          let selectedCitizens: ReadonlyArray<Citizen> = []
+
+          if (type === "car_crash") {
+            // Car crashes happen on roads, affect random citizens
+            const roadData = yield* getRandomRoadPosition
+            position = roadData.position
+            roadType = roadData.roadType
+            const stats = yield* populationService.getStats
+            const affectedCount = yield* getAffectedCount(severity, stats.total)
+            const allCitizens = yield* populationService.getCitizens
+            selectedCitizens = yield* selectRandomCitizens(allCitizens, affectedCount)
+          } else if (type === "citizen_illness") {
+            // Illness is city-wide, affects random citizens
+            position = yield* getRandomCityPosition
+            const stats = yield* populationService.getStats
+            const affectedCount = yield* getAffectedCount(severity, stats.total)
+            const allCitizens = yield* populationService.getCitizens
+            selectedCitizens = yield* selectRandomCitizens(allCitizens, affectedCount)
+          } else {
+            // Building-based events: fire, power_outage, water_main_break, citizen_accident
+            // These happen at occupied buildings and affect residents
+            const buildingData = yield* getRandomOccupiedBuilding
+            position = buildingData.position
+
+            if (buildingData.residents.length > 0) {
+              // Affect residents of the building (up to severity-based limit)
+              const maxAffected = severity === "minor" ? 2 : severity === "moderate" ? 4 : buildingData.residents.length
+              selectedCitizens = yield* selectRandomCitizens(buildingData.residents, maxAffected)
+            } else {
+              // Fallback: if building has no residents, pick random citizens
+              const stats = yield* populationService.getStats
+              const affectedCount = yield* getAffectedCount(severity, stats.total)
+              const allCitizens = yield* populationService.getCitizens
+              selectedCitizens = yield* selectRandomCitizens(allCitizens, affectedCount)
+            }
+          }
 
           // Build affected citizen details
           const affectedCitizenIds = selectedCitizens.map((c) => c.id)
@@ -182,18 +293,6 @@ export const ChaosServiceLive = Layer.effect(
                 hadHome: O.isSome(c.homeId)
               })
           )
-
-          // Get position and road type based on event type
-          let position: { x: number; y: number }
-          let roadType: O.Option<"street" | "avenue" | "highway"> = O.none()
-
-          if (type === "car_crash") {
-            const roadData = yield* getRandomRoadPosition
-            position = roadData.position
-            roadType = roadData.roadType
-          } else {
-            position = yield* getRandomCityPosition
-          }
 
           return new ChaosEvent({
             id,

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Option } from "effect"
 import { CaretDown } from "@phosphor-icons/react/dist/ssr/CaretDown"
 import type { ActivityItem, ActivityEvent, AffectedCitizenInfo } from "../../shared/MessageProtocol.js"
@@ -206,7 +206,7 @@ function ActivityCard({ item }: { item: ActivityItem }) {
         className="w-full text-left bg-transparent border-0"
         aria-expanded={isExpanded}
       >
-        <div className="px-4 py-2.5 pl-5">
+        <div className="px-4 py-2.5 pl-[17px]">
           {/* Header row */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -226,7 +226,7 @@ function ActivityCard({ item }: { item: ActivityItem }) {
 
 
       {isExpanded && (
-        <div className="px-4 pb-3 pl-5 border-t border-black/[0.06] bg-[#fcfcfc]">
+        <div className="px-4 pb-3 pl-[17px] border-t border-black/[0.06] bg-[#fcfcfc]">
           <div className="pt-2 text-[11px] text-[#555]">
             {/* Affected Citizens - only for chaos events */}
             {"affectedCitizens" in item.event && Array.isArray(item.event.affectedCitizens) && item.event.affectedCitizens.length > 0 && (
@@ -295,26 +295,47 @@ interface ActivityPanelProps {
 }
 
 export function ActivityPanel({ items }: ActivityPanelProps) {
+  const [isHovering, setIsHovering] = useState(false)
+  const [displayedItems, setDisplayedItems] = useState(items)
+  const latestItems = useRef(items)
+
+  // Always track the latest items
+  latestItems.current = items
+
+  // When not hovering, sync displayed items with actual items
+  useEffect(() => {
+    if (!isHovering) {
+      setDisplayedItems(items)
+    }
+  }, [items, isHovering])
+
+  // When hover ends, catch up to latest items
+  const handleMouseLeave = () => {
+    setIsHovering(false)
+    setDisplayedItems(latestItems.current)
+  }
+
   return (
-    <div className="relative w-full h-full bg-white border border-black/[0.08] rounded-lg flex flex-col overflow-hidden">
+    <div className="relative w-full h-full bg-white border-2 border-black/10 rounded-lg flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="px-6 py-3 flex-shrink-0 bg-white border-b border-black/[0.09]">
+      <div className="px-6 py-2 flex-shrink-0 bg-white border-b border-black/[0.09] h-[62px] flex items-center">
         <h2 className="text-2xl font-medium tracking-tight text-black">Activity</h2>
-        <p className="text-xs text-[#888] mt-1">
-          {items.length === 0 ? "Waiting for events..." : `${items.length} events`}
-        </p>
       </div>
 
       {/* Content area with gray background - scrollable */}
-      <div className="bg-[#FAFAFA] border-t border-black/[0.08] flex-1 overflow-y-auto">
+      <div
+        className="bg-[#FAFAFA] border-t border-black/[0.08] flex-1 overflow-y-auto"
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={handleMouseLeave}
+      >
         <div className="px-[11px] pt-6 pb-10 space-y-3">
-          {items.length === 0 ? (
+          {displayedItems.length === 0 ? (
             <div className="text-center py-8 text-[#888] text-sm">
               <p>No activity yet</p>
               <p className="text-xs mt-1">Events will appear here as the city evolves</p>
             </div>
           ) : (
-            items.map((item) => (
+            displayedItems.map((item) => (
               <ActivityCard key={item.id} item={item} />
             ))
           )}

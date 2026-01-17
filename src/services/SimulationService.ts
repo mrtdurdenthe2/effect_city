@@ -333,11 +333,12 @@ const BusinessLayer = BusinessServiceLive.pipe(
   Layer.provide(BaseServicesLayer)
 )
 
-// Chaos layer depends on Population and Road
+// Chaos layer depends on Population, Road, and Grid
 const ChaosLayer = ChaosServiceLive.pipe(
   Layer.provide(Layer.mergeAll(
     PopulationServiceLive,
-    RoadLayer
+    RoadLayer,
+    BaseServicesLayer
   ))
 )
 
