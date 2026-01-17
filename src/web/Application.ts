@@ -38,7 +38,8 @@ export class Application {
     })
     this.renderer.setSize(this.sizes.width, this.sizes.height)
     this.renderer.setPixelRatio(this.sizes.pixelRatio)
-    this.renderer.setClearColor(0x1a1a2e)
+    this.renderer.setClearColor(0xffffff)
+    this.renderer.shadowMap.enabled = true
 
     // Initialize camera after renderer
     this.camera = new Camera(this.eventEmitter, this.sizes, canvas)

@@ -2,11 +2,12 @@ import { Effect, Layer, Stream, Option } from "effect"
 import { GridPosition } from "../domain/Grid.js"
 import { GridService } from "../services/GridService.js"
 import { ZoneService } from "../services/ZoneService.js"
-import { RoadService, RoadServiceLive } from "../services/RoadService.js"
+import { RoadService } from "../services/RoadService.js"
 import { SimulationService, SimulationLayer } from "../services/SimulationService.js"
 import { MetricsService, MetricsServiceLive } from "../services/MetricsService.js"
 import { BusinessService } from "../services/BusinessService.js"
 import { EconomyService } from "../services/EconomyService.js"
+import { ChaosService } from "../services/ChaosService.js"
 import { Clock, ClockLive } from "../core/Clock.js"
 import type { EventEmitter } from "./EventEmitter.js"
 import type { Zone } from "../domain/Zone.js"
@@ -20,13 +21,12 @@ import type {
 } from "../shared/MessageProtocol.js"
 
 // Combined layer for all services
-// SimulationLayer includes Grid, Zone, Business, Population, Economy services
+// SimulationLayer includes Grid, Zone, Business, Population, Economy, Road, Chaos services
 const BaseLayer = SimulationLayer
 
-// Add Road service and Metrics service on top (depends on GridService from SimulationLayer)
+// Add Metrics service on top
 const AppLayer = Layer.mergeAll(
   BaseLayer,
-  RoadServiceLive.pipe(Layer.provide(BaseLayer)),
   MetricsServiceLive,
   ClockLive
 )
@@ -77,6 +77,7 @@ export class SimulationRunner {
       const metricsService = yield* MetricsService
       const businessService = yield* BusinessService
       const economyService = yield* EconomyService
+      const chaosService = yield* ChaosService
 
       // Store reference for external access
       metricsServiceRef = metricsService
@@ -84,128 +85,300 @@ export class SimulationRunner {
       // Build initial city layout
       console.log("Building initial city layout...")
 
-      // Main roads - grid pattern
-      // Horizontal roads
-      yield* road.placeRoadLine(GridPosition.create(10, 20), GridPosition.create(54, 20), "avenue")
-      yield* road.placeRoadLine(GridPosition.create(10, 32), GridPosition.create(54, 32), "avenue")
-      yield* road.placeRoadLine(GridPosition.create(10, 44), GridPosition.create(54, 44), "avenue")
+      // Main roads - grid pattern for 128x128 city
+      // Horizontal avenues (main roads)
+      yield* road.placeRoadLine(GridPosition.create(20, 32), GridPosition.create(108, 32), "avenue")
+      yield* road.placeRoadLine(GridPosition.create(20, 52), GridPosition.create(108, 52), "avenue")
+      yield* road.placeRoadLine(GridPosition.create(20, 72), GridPosition.create(108, 72), "avenue")
+      yield* road.placeRoadLine(GridPosition.create(20, 92), GridPosition.create(108, 92), "avenue")
 
-      // Vertical roads
-      yield* road.placeRoadLine(GridPosition.create(20, 10), GridPosition.create(20, 54), "avenue")
-      yield* road.placeRoadLine(GridPosition.create(32, 10), GridPosition.create(32, 54), "avenue")
-      yield* road.placeRoadLine(GridPosition.create(44, 10), GridPosition.create(44, 54), "avenue")
+      // Vertical avenues (main roads)
+      yield* road.placeRoadLine(GridPosition.create(32, 20), GridPosition.create(32, 108), "avenue")
+      yield* road.placeRoadLine(GridPosition.create(52, 20), GridPosition.create(52, 108), "avenue")
+      yield* road.placeRoadLine(GridPosition.create(72, 20), GridPosition.create(72, 108), "avenue")
+      yield* road.placeRoadLine(GridPosition.create(92, 20), GridPosition.create(92, 108), "avenue")
 
-      // Secondary streets
-      yield* road.placeRoadLine(GridPosition.create(10, 26), GridPosition.create(54, 26), "street")
-      yield* road.placeRoadLine(GridPosition.create(10, 38), GridPosition.create(54, 38), "street")
-      yield* road.placeRoadLine(GridPosition.create(26, 10), GridPosition.create(26, 54), "street")
-      yield* road.placeRoadLine(GridPosition.create(38, 10), GridPosition.create(38, 54), "street")
+      // Secondary streets (between avenues)
+      yield* road.placeRoadLine(GridPosition.create(20, 42), GridPosition.create(108, 42), "street")
+      yield* road.placeRoadLine(GridPosition.create(20, 62), GridPosition.create(108, 62), "street")
+      yield* road.placeRoadLine(GridPosition.create(20, 82), GridPosition.create(108, 82), "street")
+      yield* road.placeRoadLine(GridPosition.create(42, 20), GridPosition.create(42, 108), "street")
+      yield* road.placeRoadLine(GridPosition.create(62, 20), GridPosition.create(62, 108), "street")
+      yield* road.placeRoadLine(GridPosition.create(82, 20), GridPosition.create(82, 108), "street")
 
-      // Residential zones (green) - northwest and southwest quadrants
-      yield* zone.paintZoneArea(GridPosition.create(21, 21), GridPosition.create(25, 25), "residential")
-      yield* zone.paintZoneArea(GridPosition.create(21, 27), GridPosition.create(25, 31), "residential")
-      yield* zone.paintZoneArea(GridPosition.create(27, 21), GridPosition.create(31, 25), "residential")
-      yield* zone.paintZoneArea(GridPosition.create(21, 33), GridPosition.create(25, 37), "residential")
-      yield* zone.paintZoneArea(GridPosition.create(27, 33), GridPosition.create(31, 37), "residential")
-      yield* zone.paintZoneArea(GridPosition.create(21, 39), GridPosition.create(25, 43), "residential")
+      // Residential zones (green) - northwest quadrant and west side
+      yield* zone.paintZoneArea(GridPosition.create(33, 33), GridPosition.create(41, 41), "residential")
+      yield* zone.paintZoneArea(GridPosition.create(33, 43), GridPosition.create(41, 51), "residential")
+      yield* zone.paintZoneArea(GridPosition.create(43, 33), GridPosition.create(51, 41), "residential")
+      yield* zone.paintZoneArea(GridPosition.create(43, 43), GridPosition.create(51, 51), "residential")
+      yield* zone.paintZoneArea(GridPosition.create(33, 53), GridPosition.create(41, 61), "residential")
+      yield* zone.paintZoneArea(GridPosition.create(43, 53), GridPosition.create(51, 61), "residential")
+      yield* zone.paintZoneArea(GridPosition.create(33, 63), GridPosition.create(41, 71), "residential")
+      yield* zone.paintZoneArea(GridPosition.create(43, 63), GridPosition.create(51, 71), "residential")
+      // More residential in southwest
+      yield* zone.paintZoneArea(GridPosition.create(33, 73), GridPosition.create(41, 81), "residential")
+      yield* zone.paintZoneArea(GridPosition.create(43, 73), GridPosition.create(51, 81), "residential")
+      yield* zone.paintZoneArea(GridPosition.create(33, 83), GridPosition.create(41, 91), "residential")
+      yield* zone.paintZoneArea(GridPosition.create(43, 83), GridPosition.create(51, 91), "residential")
 
-      // Commercial zones (blue) - center and east
-      yield* zone.paintZoneArea(GridPosition.create(33, 21), GridPosition.create(37, 25), "commercial")
-      yield* zone.paintZoneArea(GridPosition.create(33, 27), GridPosition.create(37, 31), "commercial")
-      yield* zone.paintZoneArea(GridPosition.create(39, 21), GridPosition.create(43, 25), "commercial")
-      yield* zone.paintZoneArea(GridPosition.create(33, 33), GridPosition.create(37, 37), "commercial")
+      // Commercial zones (blue) - center area
+      yield* zone.paintZoneArea(GridPosition.create(53, 33), GridPosition.create(61, 41), "commercial")
+      yield* zone.paintZoneArea(GridPosition.create(63, 33), GridPosition.create(71, 41), "commercial")
+      yield* zone.paintZoneArea(GridPosition.create(53, 43), GridPosition.create(61, 51), "commercial")
+      yield* zone.paintZoneArea(GridPosition.create(63, 43), GridPosition.create(71, 51), "commercial")
+      yield* zone.paintZoneArea(GridPosition.create(53, 53), GridPosition.create(61, 61), "commercial")
+      yield* zone.paintZoneArea(GridPosition.create(63, 53), GridPosition.create(71, 61), "commercial")
+      yield* zone.paintZoneArea(GridPosition.create(53, 63), GridPosition.create(61, 71), "commercial")
+      yield* zone.paintZoneArea(GridPosition.create(63, 63), GridPosition.create(71, 71), "commercial")
 
-      // Industrial zones (yellow) - southeast
-      yield* zone.paintZoneArea(GridPosition.create(39, 33), GridPosition.create(43, 37), "industrial")
-      yield* zone.paintZoneArea(GridPosition.create(45, 33), GridPosition.create(53, 37), "industrial")
-      yield* zone.paintZoneArea(GridPosition.create(39, 39), GridPosition.create(43, 43), "industrial")
-      yield* zone.paintZoneArea(GridPosition.create(45, 39), GridPosition.create(53, 43), "industrial")
+      // Industrial zones (yellow) - east side and southeast
+      yield* zone.paintZoneArea(GridPosition.create(73, 33), GridPosition.create(81, 41), "industrial")
+      yield* zone.paintZoneArea(GridPosition.create(83, 33), GridPosition.create(91, 41), "industrial")
+      yield* zone.paintZoneArea(GridPosition.create(73, 43), GridPosition.create(81, 51), "industrial")
+      yield* zone.paintZoneArea(GridPosition.create(83, 43), GridPosition.create(91, 51), "industrial")
+      yield* zone.paintZoneArea(GridPosition.create(73, 53), GridPosition.create(81, 61), "industrial")
+      yield* zone.paintZoneArea(GridPosition.create(83, 53), GridPosition.create(91, 61), "industrial")
+      yield* zone.paintZoneArea(GridPosition.create(73, 63), GridPosition.create(81, 71), "industrial")
+      yield* zone.paintZoneArea(GridPosition.create(83, 63), GridPosition.create(91, 71), "industrial")
+      // More industrial in southeast
+      yield* zone.paintZoneArea(GridPosition.create(73, 73), GridPosition.create(81, 81), "industrial")
+      yield* zone.paintZoneArea(GridPosition.create(83, 73), GridPosition.create(91, 81), "industrial")
+      yield* zone.paintZoneArea(GridPosition.create(73, 83), GridPosition.create(81, 91), "industrial")
+      yield* zone.paintZoneArea(GridPosition.create(83, 83), GridPosition.create(91, 91), "industrial")
 
-      // Place some buildings in zoned areas (buildings spawn on zones with road access)
-      // Residential buildings - Zone 1 (21-25, 21-25)
-      yield* grid.placeBuilding(GridPosition.create(22, 22), "bldg-r1")
-      yield* grid.placeBuilding(GridPosition.create(24, 22), "bldg-r2")
-      yield* grid.placeBuilding(GridPosition.create(21, 23), "bldg-r3")
-      yield* grid.placeBuilding(GridPosition.create(23, 23), "bldg-r4")
-      yield* grid.placeBuilding(GridPosition.create(25, 23), "bldg-r5")
-      yield* grid.placeBuilding(GridPosition.create(22, 24), "bldg-r6")
-      yield* grid.placeBuilding(GridPosition.create(24, 24), "bldg-r7")
-      yield* grid.placeBuilding(GridPosition.create(21, 25), "bldg-r8")
-      yield* grid.placeBuilding(GridPosition.create(23, 25), "bldg-r9")
+      // Place residential buildings (4x the original amount)
+      // Zone 1 (33-41, 33-41)
+      yield* grid.placeBuilding(GridPosition.create(34, 34), "bldg-r1")
+      yield* grid.placeBuilding(GridPosition.create(36, 34), "bldg-r2")
+      yield* grid.placeBuilding(GridPosition.create(38, 34), "bldg-r3")
+      yield* grid.placeBuilding(GridPosition.create(40, 34), "bldg-r4")
+      yield* grid.placeBuilding(GridPosition.create(35, 36), "bldg-r5")
+      yield* grid.placeBuilding(GridPosition.create(37, 36), "bldg-r6")
+      yield* grid.placeBuilding(GridPosition.create(39, 36), "bldg-r7")
+      yield* grid.placeBuilding(GridPosition.create(34, 38), "bldg-r8")
+      yield* grid.placeBuilding(GridPosition.create(36, 38), "bldg-r9")
+      yield* grid.placeBuilding(GridPosition.create(38, 38), "bldg-r10")
+      yield* grid.placeBuilding(GridPosition.create(40, 38), "bldg-r11")
+      yield* grid.placeBuilding(GridPosition.create(35, 40), "bldg-r12")
+      yield* grid.placeBuilding(GridPosition.create(37, 40), "bldg-r13")
+      yield* grid.placeBuilding(GridPosition.create(39, 40), "bldg-r14")
 
-      // Residential buildings - Zone 2 (27-31, 21-25)
-      yield* grid.placeBuilding(GridPosition.create(28, 22), "bldg-r10")
-      yield* grid.placeBuilding(GridPosition.create(30, 22), "bldg-r11")
-      yield* grid.placeBuilding(GridPosition.create(27, 23), "bldg-r12")
-      yield* grid.placeBuilding(GridPosition.create(29, 23), "bldg-r13")
-      yield* grid.placeBuilding(GridPosition.create(31, 23), "bldg-r14")
-      yield* grid.placeBuilding(GridPosition.create(28, 24), "bldg-r15")
-      yield* grid.placeBuilding(GridPosition.create(30, 24), "bldg-r16")
+      // Zone 2 (43-51, 33-41)
+      yield* grid.placeBuilding(GridPosition.create(44, 34), "bldg-r15")
+      yield* grid.placeBuilding(GridPosition.create(46, 34), "bldg-r16")
+      yield* grid.placeBuilding(GridPosition.create(48, 34), "bldg-r17")
+      yield* grid.placeBuilding(GridPosition.create(50, 34), "bldg-r18")
+      yield* grid.placeBuilding(GridPosition.create(45, 36), "bldg-r19")
+      yield* grid.placeBuilding(GridPosition.create(47, 36), "bldg-r20")
+      yield* grid.placeBuilding(GridPosition.create(49, 36), "bldg-r21")
+      yield* grid.placeBuilding(GridPosition.create(44, 38), "bldg-r22")
+      yield* grid.placeBuilding(GridPosition.create(46, 38), "bldg-r23")
+      yield* grid.placeBuilding(GridPosition.create(48, 38), "bldg-r24")
+      yield* grid.placeBuilding(GridPosition.create(50, 38), "bldg-r25")
+      yield* grid.placeBuilding(GridPosition.create(45, 40), "bldg-r26")
+      yield* grid.placeBuilding(GridPosition.create(47, 40), "bldg-r27")
+      yield* grid.placeBuilding(GridPosition.create(49, 40), "bldg-r28")
 
-      // Residential buildings - Zone 3 (21-25, 27-31)
-      yield* grid.placeBuilding(GridPosition.create(22, 28), "bldg-r17")
-      yield* grid.placeBuilding(GridPosition.create(24, 28), "bldg-r18")
-      yield* grid.placeBuilding(GridPosition.create(21, 29), "bldg-r19")
-      yield* grid.placeBuilding(GridPosition.create(23, 29), "bldg-r20")
-      yield* grid.placeBuilding(GridPosition.create(25, 29), "bldg-r21")
-      yield* grid.placeBuilding(GridPosition.create(22, 30), "bldg-r22")
-      yield* grid.placeBuilding(GridPosition.create(24, 30), "bldg-r23")
+      // Zone 3 (33-41, 43-51)
+      yield* grid.placeBuilding(GridPosition.create(34, 44), "bldg-r29")
+      yield* grid.placeBuilding(GridPosition.create(36, 44), "bldg-r30")
+      yield* grid.placeBuilding(GridPosition.create(38, 44), "bldg-r31")
+      yield* grid.placeBuilding(GridPosition.create(40, 44), "bldg-r32")
+      yield* grid.placeBuilding(GridPosition.create(35, 46), "bldg-r33")
+      yield* grid.placeBuilding(GridPosition.create(37, 46), "bldg-r34")
+      yield* grid.placeBuilding(GridPosition.create(39, 46), "bldg-r35")
+      yield* grid.placeBuilding(GridPosition.create(34, 48), "bldg-r36")
+      yield* grid.placeBuilding(GridPosition.create(36, 48), "bldg-r37")
+      yield* grid.placeBuilding(GridPosition.create(38, 48), "bldg-r38")
+      yield* grid.placeBuilding(GridPosition.create(40, 48), "bldg-r39")
+      yield* grid.placeBuilding(GridPosition.create(35, 50), "bldg-r40")
+      yield* grid.placeBuilding(GridPosition.create(37, 50), "bldg-r41")
+      yield* grid.placeBuilding(GridPosition.create(39, 50), "bldg-r42")
 
-      // Residential buildings - Zone 4 (21-25, 33-37)
-      yield* grid.placeBuilding(GridPosition.create(22, 34), "bldg-r24")
-      yield* grid.placeBuilding(GridPosition.create(24, 34), "bldg-r25")
-      yield* grid.placeBuilding(GridPosition.create(21, 35), "bldg-r26")
-      yield* grid.placeBuilding(GridPosition.create(23, 35), "bldg-r27")
-      yield* grid.placeBuilding(GridPosition.create(25, 35), "bldg-r28")
-      yield* grid.placeBuilding(GridPosition.create(22, 36), "bldg-r29")
-      yield* grid.placeBuilding(GridPosition.create(24, 36), "bldg-r30")
+      // Zone 4 (43-51, 43-51)
+      yield* grid.placeBuilding(GridPosition.create(44, 44), "bldg-r43")
+      yield* grid.placeBuilding(GridPosition.create(46, 44), "bldg-r44")
+      yield* grid.placeBuilding(GridPosition.create(48, 44), "bldg-r45")
+      yield* grid.placeBuilding(GridPosition.create(50, 44), "bldg-r46")
+      yield* grid.placeBuilding(GridPosition.create(45, 46), "bldg-r47")
+      yield* grid.placeBuilding(GridPosition.create(47, 46), "bldg-r48")
+      yield* grid.placeBuilding(GridPosition.create(49, 46), "bldg-r49")
+      yield* grid.placeBuilding(GridPosition.create(44, 48), "bldg-r50")
+      yield* grid.placeBuilding(GridPosition.create(46, 48), "bldg-r51")
+      yield* grid.placeBuilding(GridPosition.create(48, 48), "bldg-r52")
+      yield* grid.placeBuilding(GridPosition.create(50, 48), "bldg-r53")
+      yield* grid.placeBuilding(GridPosition.create(45, 50), "bldg-r54")
+      yield* grid.placeBuilding(GridPosition.create(47, 50), "bldg-r55")
+      yield* grid.placeBuilding(GridPosition.create(49, 50), "bldg-r56")
 
-      // Residential buildings - Zone 5 (27-31, 33-37)
-      yield* grid.placeBuilding(GridPosition.create(28, 34), "bldg-r31")
-      yield* grid.placeBuilding(GridPosition.create(30, 34), "bldg-r32")
-      yield* grid.placeBuilding(GridPosition.create(27, 35), "bldg-r33")
-      yield* grid.placeBuilding(GridPosition.create(29, 35), "bldg-r34")
-      yield* grid.placeBuilding(GridPosition.create(31, 35), "bldg-r35")
+      // Zone 5 (33-41, 53-61)
+      yield* grid.placeBuilding(GridPosition.create(34, 54), "bldg-r57")
+      yield* grid.placeBuilding(GridPosition.create(36, 54), "bldg-r58")
+      yield* grid.placeBuilding(GridPosition.create(38, 54), "bldg-r59")
+      yield* grid.placeBuilding(GridPosition.create(40, 54), "bldg-r60")
+      yield* grid.placeBuilding(GridPosition.create(35, 56), "bldg-r61")
+      yield* grid.placeBuilding(GridPosition.create(37, 56), "bldg-r62")
+      yield* grid.placeBuilding(GridPosition.create(39, 56), "bldg-r63")
+      yield* grid.placeBuilding(GridPosition.create(34, 58), "bldg-r64")
+      yield* grid.placeBuilding(GridPosition.create(36, 58), "bldg-r65")
+      yield* grid.placeBuilding(GridPosition.create(38, 58), "bldg-r66")
+      yield* grid.placeBuilding(GridPosition.create(40, 58), "bldg-r67")
+      yield* grid.placeBuilding(GridPosition.create(35, 60), "bldg-r68")
+      yield* grid.placeBuilding(GridPosition.create(37, 60), "bldg-r69")
+      yield* grid.placeBuilding(GridPosition.create(39, 60), "bldg-r70")
 
-      // Residential buildings - Zone 6 (21-25, 39-43)
-      yield* grid.placeBuilding(GridPosition.create(22, 40), "bldg-r36")
-      yield* grid.placeBuilding(GridPosition.create(24, 40), "bldg-r37")
-      yield* grid.placeBuilding(GridPosition.create(21, 41), "bldg-r38")
-      yield* grid.placeBuilding(GridPosition.create(23, 41), "bldg-r39")
-      yield* grid.placeBuilding(GridPosition.create(25, 41), "bldg-r40")
+      // Zone 6 (43-51, 53-61)
+      yield* grid.placeBuilding(GridPosition.create(44, 54), "bldg-r71")
+      yield* grid.placeBuilding(GridPosition.create(46, 54), "bldg-r72")
+      yield* grid.placeBuilding(GridPosition.create(48, 54), "bldg-r73")
+      yield* grid.placeBuilding(GridPosition.create(50, 54), "bldg-r74")
+      yield* grid.placeBuilding(GridPosition.create(45, 56), "bldg-r75")
+      yield* grid.placeBuilding(GridPosition.create(47, 56), "bldg-r76")
+      yield* grid.placeBuilding(GridPosition.create(49, 56), "bldg-r77")
+      yield* grid.placeBuilding(GridPosition.create(44, 58), "bldg-r78")
+      yield* grid.placeBuilding(GridPosition.create(46, 58), "bldg-r79")
+      yield* grid.placeBuilding(GridPosition.create(48, 58), "bldg-r80")
 
-      // Commercial buildings
-      yield* grid.placeBuilding(GridPosition.create(34, 22), "bldg-c1")
-      yield* grid.placeBuilding(GridPosition.create(36, 23), "bldg-c2")
-      yield* grid.placeBuilding(GridPosition.create(35, 24), "bldg-c3")
-      yield* grid.placeBuilding(GridPosition.create(40, 22), "bldg-c4")
-      yield* grid.placeBuilding(GridPosition.create(34, 28), "bldg-c5")
-      yield* grid.placeBuilding(GridPosition.create(36, 29), "bldg-c6")
-      yield* grid.placeBuilding(GridPosition.create(34, 34), "bldg-c7")
+      // Zone 7 (33-41, 63-71)
+      yield* grid.placeBuilding(GridPosition.create(34, 64), "bldg-r81")
+      yield* grid.placeBuilding(GridPosition.create(36, 64), "bldg-r82")
+      yield* grid.placeBuilding(GridPosition.create(38, 64), "bldg-r83")
+      yield* grid.placeBuilding(GridPosition.create(40, 64), "bldg-r84")
+      yield* grid.placeBuilding(GridPosition.create(35, 66), "bldg-r85")
+      yield* grid.placeBuilding(GridPosition.create(37, 66), "bldg-r86")
+      yield* grid.placeBuilding(GridPosition.create(39, 66), "bldg-r87")
+      yield* grid.placeBuilding(GridPosition.create(34, 68), "bldg-r88")
+      yield* grid.placeBuilding(GridPosition.create(36, 68), "bldg-r89")
+      yield* grid.placeBuilding(GridPosition.create(38, 68), "bldg-r90")
 
-      // Industrial buildings
-      yield* grid.placeBuilding(GridPosition.create(40, 34), "bldg-i1")
-      yield* grid.placeBuilding(GridPosition.create(42, 35), "bldg-i2")
-      yield* grid.placeBuilding(GridPosition.create(46, 34), "bldg-i3")
-      yield* grid.placeBuilding(GridPosition.create(50, 35), "bldg-i4")
-      yield* grid.placeBuilding(GridPosition.create(40, 40), "bldg-i5")
-      yield* grid.placeBuilding(GridPosition.create(48, 41), "bldg-i6")
+      // Zone 8 (43-51, 63-71)
+      yield* grid.placeBuilding(GridPosition.create(44, 64), "bldg-r91")
+      yield* grid.placeBuilding(GridPosition.create(46, 64), "bldg-r92")
+      yield* grid.placeBuilding(GridPosition.create(48, 64), "bldg-r93")
+      yield* grid.placeBuilding(GridPosition.create(50, 64), "bldg-r94")
+      yield* grid.placeBuilding(GridPosition.create(45, 66), "bldg-r95")
+      yield* grid.placeBuilding(GridPosition.create(47, 66), "bldg-r96")
+      yield* grid.placeBuilding(GridPosition.create(49, 66), "bldg-r97")
+      yield* grid.placeBuilding(GridPosition.create(44, 68), "bldg-r98")
+      yield* grid.placeBuilding(GridPosition.create(46, 68), "bldg-r99")
+      yield* grid.placeBuilding(GridPosition.create(48, 68), "bldg-r100")
+
+      // More residential in southwest zones (33-51, 73-91)
+      yield* grid.placeBuilding(GridPosition.create(34, 74), "bldg-r101")
+      yield* grid.placeBuilding(GridPosition.create(36, 74), "bldg-r102")
+      yield* grid.placeBuilding(GridPosition.create(38, 74), "bldg-r103")
+      yield* grid.placeBuilding(GridPosition.create(40, 74), "bldg-r104")
+      yield* grid.placeBuilding(GridPosition.create(44, 74), "bldg-r105")
+      yield* grid.placeBuilding(GridPosition.create(46, 74), "bldg-r106")
+      yield* grid.placeBuilding(GridPosition.create(48, 74), "bldg-r107")
+      yield* grid.placeBuilding(GridPosition.create(50, 74), "bldg-r108")
+      yield* grid.placeBuilding(GridPosition.create(35, 76), "bldg-r109")
+      yield* grid.placeBuilding(GridPosition.create(37, 76), "bldg-r110")
+      yield* grid.placeBuilding(GridPosition.create(45, 76), "bldg-r111")
+      yield* grid.placeBuilding(GridPosition.create(47, 76), "bldg-r112")
+      yield* grid.placeBuilding(GridPosition.create(34, 78), "bldg-r113")
+      yield* grid.placeBuilding(GridPosition.create(36, 78), "bldg-r114")
+      yield* grid.placeBuilding(GridPosition.create(44, 78), "bldg-r115")
+      yield* grid.placeBuilding(GridPosition.create(46, 78), "bldg-r116")
+      yield* grid.placeBuilding(GridPosition.create(34, 84), "bldg-r117")
+      yield* grid.placeBuilding(GridPosition.create(36, 84), "bldg-r118")
+      yield* grid.placeBuilding(GridPosition.create(38, 84), "bldg-r119")
+      yield* grid.placeBuilding(GridPosition.create(44, 84), "bldg-r120")
+      yield* grid.placeBuilding(GridPosition.create(46, 84), "bldg-r121")
+      yield* grid.placeBuilding(GridPosition.create(48, 84), "bldg-r122")
+      yield* grid.placeBuilding(GridPosition.create(35, 86), "bldg-r123")
+      yield* grid.placeBuilding(GridPosition.create(37, 86), "bldg-r124")
+      yield* grid.placeBuilding(GridPosition.create(45, 86), "bldg-r125")
+      yield* grid.placeBuilding(GridPosition.create(47, 86), "bldg-r126")
+      yield* grid.placeBuilding(GridPosition.create(34, 88), "bldg-r127")
+      yield* grid.placeBuilding(GridPosition.create(36, 88), "bldg-r128")
+      yield* grid.placeBuilding(GridPosition.create(44, 88), "bldg-r129")
+      yield* grid.placeBuilding(GridPosition.create(46, 88), "bldg-r130")
+
+      // Commercial buildings (scaled up)
+      yield* grid.placeBuilding(GridPosition.create(54, 34), "bldg-c1")
+      yield* grid.placeBuilding(GridPosition.create(56, 34), "bldg-c2")
+      yield* grid.placeBuilding(GridPosition.create(58, 34), "bldg-c3")
+      yield* grid.placeBuilding(GridPosition.create(60, 34), "bldg-c4")
+      yield* grid.placeBuilding(GridPosition.create(64, 34), "bldg-c5")
+      yield* grid.placeBuilding(GridPosition.create(66, 34), "bldg-c6")
+      yield* grid.placeBuilding(GridPosition.create(68, 34), "bldg-c7")
+      yield* grid.placeBuilding(GridPosition.create(70, 34), "bldg-c8")
+      yield* grid.placeBuilding(GridPosition.create(55, 36), "bldg-c9")
+      yield* grid.placeBuilding(GridPosition.create(57, 36), "bldg-c10")
+      yield* grid.placeBuilding(GridPosition.create(65, 36), "bldg-c11")
+      yield* grid.placeBuilding(GridPosition.create(67, 36), "bldg-c12")
+      yield* grid.placeBuilding(GridPosition.create(54, 38), "bldg-c13")
+      yield* grid.placeBuilding(GridPosition.create(56, 38), "bldg-c14")
+      yield* grid.placeBuilding(GridPosition.create(64, 38), "bldg-c15")
+      yield* grid.placeBuilding(GridPosition.create(66, 38), "bldg-c16")
+      yield* grid.placeBuilding(GridPosition.create(54, 44), "bldg-c17")
+      yield* grid.placeBuilding(GridPosition.create(56, 44), "bldg-c18")
+      yield* grid.placeBuilding(GridPosition.create(58, 44), "bldg-c19")
+      yield* grid.placeBuilding(GridPosition.create(64, 44), "bldg-c20")
+      yield* grid.placeBuilding(GridPosition.create(66, 44), "bldg-c21")
+      yield* grid.placeBuilding(GridPosition.create(68, 44), "bldg-c22")
+      yield* grid.placeBuilding(GridPosition.create(55, 46), "bldg-c23")
+      yield* grid.placeBuilding(GridPosition.create(57, 46), "bldg-c24")
+      yield* grid.placeBuilding(GridPosition.create(65, 46), "bldg-c25")
+      yield* grid.placeBuilding(GridPosition.create(67, 46), "bldg-c26")
+      yield* grid.placeBuilding(GridPosition.create(54, 54), "bldg-c27")
+      yield* grid.placeBuilding(GridPosition.create(56, 54), "bldg-c28")
+      yield* grid.placeBuilding(GridPosition.create(64, 54), "bldg-c29")
+      yield* grid.placeBuilding(GridPosition.create(66, 54), "bldg-c30")
+      yield* grid.placeBuilding(GridPosition.create(55, 56), "bldg-c31")
+      yield* grid.placeBuilding(GridPosition.create(65, 56), "bldg-c32")
+      yield* grid.placeBuilding(GridPosition.create(54, 64), "bldg-c33")
+      yield* grid.placeBuilding(GridPosition.create(56, 64), "bldg-c34")
+      yield* grid.placeBuilding(GridPosition.create(64, 64), "bldg-c35")
+      yield* grid.placeBuilding(GridPosition.create(66, 64), "bldg-c36")
+
+      // Industrial buildings (scaled up)
+      yield* grid.placeBuilding(GridPosition.create(74, 34), "bldg-i1")
+      yield* grid.placeBuilding(GridPosition.create(76, 34), "bldg-i2")
+      yield* grid.placeBuilding(GridPosition.create(78, 34), "bldg-i3")
+      yield* grid.placeBuilding(GridPosition.create(80, 34), "bldg-i4")
+      yield* grid.placeBuilding(GridPosition.create(84, 34), "bldg-i5")
+      yield* grid.placeBuilding(GridPosition.create(86, 34), "bldg-i6")
+      yield* grid.placeBuilding(GridPosition.create(88, 34), "bldg-i7")
+      yield* grid.placeBuilding(GridPosition.create(90, 34), "bldg-i8")
+      yield* grid.placeBuilding(GridPosition.create(75, 36), "bldg-i9")
+      yield* grid.placeBuilding(GridPosition.create(77, 36), "bldg-i10")
+      yield* grid.placeBuilding(GridPosition.create(85, 36), "bldg-i11")
+      yield* grid.placeBuilding(GridPosition.create(87, 36), "bldg-i12")
+      yield* grid.placeBuilding(GridPosition.create(74, 44), "bldg-i13")
+      yield* grid.placeBuilding(GridPosition.create(76, 44), "bldg-i14")
+      yield* grid.placeBuilding(GridPosition.create(84, 44), "bldg-i15")
+      yield* grid.placeBuilding(GridPosition.create(86, 44), "bldg-i16")
+      yield* grid.placeBuilding(GridPosition.create(75, 46), "bldg-i17")
+      yield* grid.placeBuilding(GridPosition.create(85, 46), "bldg-i18")
+      yield* grid.placeBuilding(GridPosition.create(74, 54), "bldg-i19")
+      yield* grid.placeBuilding(GridPosition.create(76, 54), "bldg-i20")
+      yield* grid.placeBuilding(GridPosition.create(84, 54), "bldg-i21")
+      yield* grid.placeBuilding(GridPosition.create(86, 54), "bldg-i22")
+      yield* grid.placeBuilding(GridPosition.create(74, 64), "bldg-i23")
+      yield* grid.placeBuilding(GridPosition.create(84, 64), "bldg-i24")
+      yield* grid.placeBuilding(GridPosition.create(74, 74), "bldg-i25")
+      yield* grid.placeBuilding(GridPosition.create(76, 74), "bldg-i26")
+      yield* grid.placeBuilding(GridPosition.create(84, 74), "bldg-i27")
+      yield* grid.placeBuilding(GridPosition.create(86, 74), "bldg-i28")
+      yield* grid.placeBuilding(GridPosition.create(75, 76), "bldg-i29")
+      yield* grid.placeBuilding(GridPosition.create(85, 76), "bldg-i30")
+      yield* grid.placeBuilding(GridPosition.create(74, 84), "bldg-i31")
+      yield* grid.placeBuilding(GridPosition.create(76, 84), "bldg-i32")
+      yield* grid.placeBuilding(GridPosition.create(84, 84), "bldg-i33")
+      yield* grid.placeBuilding(GridPosition.create(86, 84), "bldg-i34")
 
       console.log("Initial city layout complete!")
 
-      // Collect residential building IDs for housing assignments
-      const residentialBuildingIds = [
-        "bldg-r1", "bldg-r2", "bldg-r3", "bldg-r4", "bldg-r5", "bldg-r6", "bldg-r7", "bldg-r8", "bldg-r9", "bldg-r10",
-        "bldg-r11", "bldg-r12", "bldg-r13", "bldg-r14", "bldg-r15", "bldg-r16", "bldg-r17", "bldg-r18", "bldg-r19", "bldg-r20",
-        "bldg-r21", "bldg-r22", "bldg-r23", "bldg-r24", "bldg-r25", "bldg-r26", "bldg-r27", "bldg-r28", "bldg-r29", "bldg-r30",
-        "bldg-r31", "bldg-r32", "bldg-r33", "bldg-r34", "bldg-r35", "bldg-r36", "bldg-r37", "bldg-r38", "bldg-r39", "bldg-r40"
-      ]
+      // Collect residential building IDs for housing assignments (130 buildings)
+      const residentialBuildingIds = Array.from({ length: 130 }, (_, i) => `bldg-r${i + 1}`)
 
       // Update simulation config with residential buildings
       yield* simulation.setConfig({
         residentialBuildingIds,
-        citizensPerHome: 4,  // 4 citizens per residential building = 160 max population
-        utilityCosts: 20
+        citizensPerHome: 4,  // 4 citizens per residential building = 520 max population
+        utilityCosts: 50     // Scaled up for larger city
       })
 
       // Start simulation
@@ -315,6 +488,7 @@ export class SimulationRunner {
           const clockEvents = yield* clock.subscribe
           const businessEvents = yield* businessService.subscribe
           const economyEvents = yield* economyService.subscribe
+          const chaosEvents = yield* chaosService.subscribe
 
           // Grid events
           yield* Effect.fork(
@@ -521,6 +695,157 @@ export class SimulationRunner {
                       emitter,
                       {
                         _tag: "Bankrupt"
+                      },
+                      tick,
+                      event.trace
+                    )
+                  }
+                })
+              )
+            )
+          )
+
+          // Chaos events -> Activity events
+          yield* Effect.fork(
+            Stream.fromQueue(chaosEvents).pipe(
+              Stream.runForEach((event) =>
+                Effect.gen(function* () {
+                  const clockState = yield* clock.getState
+                  const tick = clockState.tickCount
+
+                  if (event._tag === "CarCrash") {
+                    const affectedCitizens = event.event.affectedCitizenDetails.map((c) => ({
+                      id: c.id,
+                      firstName: c.firstName,
+                      lastName: c.lastName,
+                      age: c.age,
+                      wasEmployed: c.wasEmployed,
+                      hadHome: c.hadHome
+                    }))
+                    emitActivityEvent(
+                      emitter,
+                      {
+                        _tag: "CarCrash",
+                        eventId: event.event.id,
+                        severity: event.event.severity,
+                        position: { x: event.event.position.x, y: event.event.position.y },
+                        roadType: event.event.roadType,
+                        affectedCitizens
+                      },
+                      tick,
+                      event.trace
+                    )
+                  } else if (event._tag === "CitizenAccident") {
+                    const affectedCitizens = event.event.affectedCitizenDetails.map((c) => ({
+                      id: c.id,
+                      firstName: c.firstName,
+                      lastName: c.lastName,
+                      age: c.age,
+                      wasEmployed: c.wasEmployed,
+                      hadHome: c.hadHome
+                    }))
+                    emitActivityEvent(
+                      emitter,
+                      {
+                        _tag: "CitizenAccident",
+                        eventId: event.event.id,
+                        severity: event.event.severity,
+                        position: { x: event.event.position.x, y: event.event.position.y },
+                        affectedCitizens
+                      },
+                      tick,
+                      event.trace
+                    )
+                  } else if (event._tag === "CitizenIllness") {
+                    const affectedCitizens = event.event.affectedCitizenDetails.map((c) => ({
+                      id: c.id,
+                      firstName: c.firstName,
+                      lastName: c.lastName,
+                      age: c.age,
+                      wasEmployed: c.wasEmployed,
+                      hadHome: c.hadHome
+                    }))
+                    emitActivityEvent(
+                      emitter,
+                      {
+                        _tag: "CitizenIllness",
+                        eventId: event.event.id,
+                        severity: event.event.severity,
+                        affectedCitizens
+                      },
+                      tick,
+                      event.trace
+                    )
+                  } else if (event._tag === "PowerOutage") {
+                    const affectedCitizens = event.event.affectedCitizenDetails.map((c) => ({
+                      id: c.id,
+                      firstName: c.firstName,
+                      lastName: c.lastName,
+                      age: c.age,
+                      wasEmployed: c.wasEmployed,
+                      hadHome: c.hadHome
+                    }))
+                    emitActivityEvent(
+                      emitter,
+                      {
+                        _tag: "PowerOutage",
+                        eventId: event.event.id,
+                        severity: event.event.severity,
+                        position: { x: event.event.position.x, y: event.event.position.y },
+                        affectedCitizens
+                      },
+                      tick,
+                      event.trace
+                    )
+                  } else if (event._tag === "WaterMainBreak") {
+                    const affectedCitizens = event.event.affectedCitizenDetails.map((c) => ({
+                      id: c.id,
+                      firstName: c.firstName,
+                      lastName: c.lastName,
+                      age: c.age,
+                      wasEmployed: c.wasEmployed,
+                      hadHome: c.hadHome
+                    }))
+                    emitActivityEvent(
+                      emitter,
+                      {
+                        _tag: "WaterMainBreak",
+                        eventId: event.event.id,
+                        severity: event.event.severity,
+                        position: { x: event.event.position.x, y: event.event.position.y },
+                        affectedCitizens
+                      },
+                      tick,
+                      event.trace
+                    )
+                  } else if (event._tag === "Fire") {
+                    const affectedCitizens = event.event.affectedCitizenDetails.map((c) => ({
+                      id: c.id,
+                      firstName: c.firstName,
+                      lastName: c.lastName,
+                      age: c.age,
+                      wasEmployed: c.wasEmployed,
+                      hadHome: c.hadHome
+                    }))
+                    emitActivityEvent(
+                      emitter,
+                      {
+                        _tag: "Fire",
+                        eventId: event.event.id,
+                        severity: event.event.severity,
+                        position: { x: event.event.position.x, y: event.event.position.y },
+                        affectedCitizens
+                      },
+                      tick,
+                      event.trace
+                    )
+                  } else if (event._tag === "ChaosResolved") {
+                    emitActivityEvent(
+                      emitter,
+                      {
+                        _tag: "ChaosResolved",
+                        eventId: event.eventId,
+                        eventType: event.eventType
                       },
                       tick,
                       event.trace

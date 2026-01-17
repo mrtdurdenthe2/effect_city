@@ -1,4 +1,4 @@
-import { GridHelper, AmbientLight, DirectionalLight } from "three"
+import { AmbientLight, DirectionalLight, PlaneGeometry, MeshStandardMaterial, Mesh } from "three"
 import type { Application } from "../Application.js"
 import { GridRenderer } from "./GridRenderer.js"
 import type { ServerMessage, SerializedCell } from "../../shared/MessageProtocol.js"
@@ -12,17 +12,33 @@ export class World {
     this.app = app
 
     // Add basic lighting (for optional future use with materials)
-    const ambientLight = new AmbientLight(0xffffff, 0.6)
+    const ambientLight = new AmbientLight(0xffffff, 0.9)
     this.app.scene.add(ambientLight)
 
     const directionalLight = new DirectionalLight(0xffffff, 0.8)
     directionalLight.position.set(50, 100, 50)
+    directionalLight.castShadow = true
+    directionalLight.shadow.mapSize.width = 2048
+    directionalLight.shadow.mapSize.height = 2048
+    directionalLight.shadow.camera.left = -80
+    directionalLight.shadow.camera.right = 80
+    directionalLight.shadow.camera.top = 80
+    directionalLight.shadow.camera.bottom = -80
+    directionalLight.shadow.camera.near = 10
+    directionalLight.shadow.camera.far = 200
     this.app.scene.add(directionalLight)
 
-    // Add grid helper for debugging
-    const gridHelper = new GridHelper(64, 64, 0x444444, 0x333333)
-    gridHelper.position.set(32, 0.01, 32)
-    this.app.scene.add(gridHelper)
+    // Add infinite ground plane
+    const groundGeometry = new PlaneGeometry(2000, 2000)
+    groundGeometry.rotateX(-Math.PI / 2)
+    const groundMaterial = new MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.8
+    })
+    const ground = new Mesh(groundGeometry, groundMaterial)
+    ground.position.set(64, -0.01, 64)
+    ground.receiveShadow = true
+    this.app.scene.add(ground)
 
     // Create grid renderer
     this.gridRenderer = new GridRenderer(this.app.scene)

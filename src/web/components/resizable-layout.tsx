@@ -70,20 +70,20 @@ export function ResizableLayout({
   }, [handleMouseDown, attachListeners, detachListeners])
 
   return (
-    <div ref={containerRef} className="flex h-screen w-full">
+    <div ref={containerRef} className="flex h-screen w-full p-[5px] gap-[5px]">
       {/* Left Panel */}
-      <div className="h-full overflow-hidden" style={{ width: `${leftWidth}%` }}>
+      <div className="h-full overflow-hidden rounded-[8px]" style={{ width: `${leftWidth}%` }}>
         {leftPanel}
       </div>
 
       {/* Resizer Handle */}
       <div
-        className="w-1 bg-border hover:bg-primary/50 cursor-col-resize flex-shrink-0 transition-colors"
+        className="w-1 hover:bg-primary/50 cursor-col-resize flex-shrink-0 transition-colors"
         onMouseDown={onDragStart}
       />
 
       {/* Right Panel */}
-      <div className="h-full overflow-auto" style={{ width: `${100 - leftWidth}%` }}>
+      <div className="h-full overflow-auto rounded-[8px]" style={{ width: `${100 - leftWidth}%` }}>
         {rightPanel}
       </div>
     </div>

@@ -61,7 +61,7 @@ const LineGraph: React.FC<{
     const range = maxVal - minVal || 1
 
     // Draw background grid
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.1)"
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.08)"
     ctx.lineWidth = 1
     for (let i = 0; i <= 4; i++) {
       const y = (i / 4) * height
@@ -74,7 +74,7 @@ const LineGraph: React.FC<{
     // Draw zero line if applicable
     if (minVal < 0 && maxVal > 0) {
       const zeroY = height - ((0 - minVal) / range) * height
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.3)"
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.2)"
       ctx.setLineDash([4, 4])
       ctx.beginPath()
       ctx.moveTo(0, zeroY)
@@ -194,8 +194,9 @@ export const MetricsGraphPanel: React.FC<MetricsGraphPanelProps> = ({
               key={config.name}
               style={{
                 ...styles.filterButton,
-                backgroundColor: selectedMetrics.has(config.name) ? config.color : "#333",
-                opacity: selectedMetrics.has(config.name) ? 1 : 0.5
+                backgroundColor: selectedMetrics.has(config.name) ? config.color : "#e5e5e5",
+                color: selectedMetrics.has(config.name) ? "#fff" : "#333",
+                opacity: selectedMetrics.has(config.name) ? 1 : 0.9
               }}
               onClick={() => toggleMetric(config.name)}
             >
@@ -237,7 +238,8 @@ export const MetricsGraphPanel: React.FC<MetricsGraphPanelProps> = ({
 
 const graphStyles: Record<string, React.CSSProperties> = {
   container: {
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    backgroundColor: "#f7f7f7",
+    border: "1px solid rgba(0,0,0,0.06)",
     borderRadius: 6,
     padding: 8,
     display: "flex",
@@ -259,19 +261,19 @@ const graphStyles: Record<string, React.CSSProperties> = {
   value: {
     fontSize: 12,
     fontWeight: "bold",
-    color: "#fff",
+    color: "#222",
     fontVariantNumeric: "tabular-nums"
   },
   canvas: {
     borderRadius: 4,
-    backgroundColor: "rgba(0, 0, 0, 0.2)"
+    backgroundColor: "#f1f1f1"
   },
   noData: {
     position: "absolute",
     top: "50%",
     left: "50%",
     transform: "translate(-50%, -50%)",
-    color: "#666",
+    color: "#999",
     fontSize: 11
   }
 }
@@ -283,22 +285,24 @@ const styles: Record<string, React.CSSProperties> = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    backgroundColor: "rgba(0, 0, 0, 0.2)",
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
     zIndex: 1000
   },
   panel: {
-    backgroundColor: "rgba(26, 26, 46, 0.98)",
+    backgroundColor: "#fff",
+    border: "1px solid rgba(0,0,0,0.08)",
     borderRadius: 12,
     padding: 20,
     maxWidth: "95vw",
     maxHeight: "90vh",
     overflow: "auto",
-    color: "#fff",
+    color: "#222",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    minWidth: 700
+    minWidth: 700,
+    boxShadow: "0 18px 40px rgba(0,0,0,0.18)"
   },
   header: {
     display: "flex",
@@ -311,9 +315,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: "bold"
   },
   closeButton: {
-    background: "rgba(255,255,255,0.1)",
-    border: "none",
-    color: "#fff",
+    background: "#f2f2f2",
+    border: "1px solid rgba(0,0,0,0.08)",
+    color: "#222",
     fontSize: 14,
     cursor: "pointer",
     padding: "6px 12px",
@@ -322,7 +326,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   info: {
     fontSize: 12,
-    color: "#888",
+    color: "#666",
     marginBottom: 16
   },
   filters: {
@@ -333,9 +337,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   filterButton: {
     padding: "4px 10px",
-    border: "none",
+    border: "1px solid rgba(0,0,0,0.08)",
     borderRadius: 4,
-    color: "#fff",
     cursor: "pointer",
     fontSize: 11,
     fontWeight: "bold",
@@ -350,11 +353,11 @@ const styles: Record<string, React.CSSProperties> = {
   otherSection: {
     marginTop: 20,
     paddingTop: 16,
-    borderTop: "1px solid rgba(255,255,255,0.1)"
+    borderTop: "1px solid rgba(0,0,0,0.08)"
   },
   sectionTitle: {
     fontSize: 12,
-    color: "#888",
+    color: "#666",
     textTransform: "uppercase",
     letterSpacing: 1,
     marginBottom: 8
@@ -366,9 +369,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   otherMetric: {
     padding: "4px 8px",
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "#f2f2f2",
     borderRadius: 4,
     fontSize: 11,
-    color: "#aaa"
+    color: "#555"
   }
 }

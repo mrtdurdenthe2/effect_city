@@ -1,22 +1,46 @@
-import React from "react"
-import type { SerializedSimulationStats, ClockState } from "../../shared/MessageProtocol.js"
+import React, { useEffect, useMemo, useRef } from "react"
+import { Wallet } from "@phosphor-icons/react/dist/ssr/Wallet"
+import { UsersThree } from "@phosphor-icons/react/dist/ssr/UsersThree"
+import { SmileyMeh } from "@phosphor-icons/react/dist/ssr/SmileyMeh"
+import { CaretUp } from "@phosphor-icons/react/dist/ssr/CaretUp"
+import { CaretDown } from "@phosphor-icons/react/dist/ssr/CaretDown"
+import type { SerializedSimulationStats } from "../../shared/MessageProtocol.js"
 
 interface StatsPanelProps {
   stats: SerializedSimulationStats | null
-  clock: ClockState | null
-  onTogglePause: () => void
-  onSetSpeed: (speed: 1 | 2 | 3) => void
-  onToggleGraphs: () => void
 }
 
 export const StatsPanel: React.FC<StatsPanelProps> = ({
-  stats,
-  clock,
-  onTogglePause,
-  onSetSpeed,
-  onToggleGraphs
+  stats
 }) => {
-  if (!stats || !clock) {
+  const prevStats = useRef<SerializedSimulationStats | null>(null)
+
+  const deltas = useMemo(() => {
+    if (!stats) {
+      return null
+    }
+    const prev = prevStats.current
+    if (!prev) {
+      return {
+        treasury: 0,
+        population: 0,
+        happiness: 0
+      }
+    }
+    return {
+      treasury: stats.treasury.balance - prev.treasury.balance,
+      population: stats.population.total - prev.population.total,
+      happiness: stats.population.averageHappiness - prev.population.averageHappiness
+    }
+  }, [stats])
+
+  useEffect(() => {
+    if (stats) {
+      prevStats.current = stats
+    }
+  }, [stats])
+
+  if (!stats || !deltas) {
     return (
       <div style={styles.container}>
         <div style={styles.loading}>Connecting...</div>
@@ -26,119 +50,73 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({
 
   return (
     <div style={styles.container}>
-      {/* Title */}
-      <div style={styles.title}>Effect City</div>
-
-      {/* Clock Controls */}
-      <div style={styles.section}>
-        <div style={styles.row}>
-          <button
-            style={styles.button}
-            onClick={onTogglePause}
-          >
-            {clock.isPaused ? "▶ Play" : "⏸ Pause"}
-          </button>
-          <div style={styles.speedButtons}>
-            {([1, 2, 3] as const).map((speed) => (
-              <button
-                key={speed}
-                style={{
-                  ...styles.speedButton,
-                  ...(clock.speed === speed ? styles.speedButtonActive : {})
-                }}
-                onClick={() => onSetSpeed(speed)}
-              >
-                {speed}x
-              </button>
-            ))}
-          </div>
-        </div>
-        <div style={styles.label}>Tick: {clock.tickCount}</div>
+      <div style={styles.statGroup}>
+        <StatColumn
+          tone="green"
+          icon={(color) => <Wallet size={21} weight="fill" color={color} />}
+          value={formatCompactFixed(stats.treasury.balance)}
+          delta={formatDelta(deltas.treasury)}
+          deltaUp={deltas.treasury >= 0}
+        />
+        <StatColumn
+          tone="green"
+          icon={(color) => <UsersThree size={24} weight="fill" color={color} />}
+          value={formatCompactFixed(stats.population.total)}
+          delta={formatDelta(deltas.population)}
+          deltaUp={deltas.population >= 0}
+        />
+        <StatColumn
+          tone={getHappinessTone(stats.population.averageHappiness)}
+          icon={(color) => <SmileyMeh size={24} weight="fill" color={color} />}
+          value={`${Math.round(stats.population.averageHappiness)}%`}
+          delta={formatDelta(deltas.happiness, true)}
+          deltaUp={deltas.happiness >= 0}
+        />
       </div>
-
-      {/* Population */}
-      <div style={styles.section}>
-        <div style={styles.sectionTitle}>Population</div>
-        <div style={styles.stat}>
-          <span>Total</span>
-          <span style={styles.value}>{stats.population.total}</span>
-        </div>
-        <div style={styles.stat}>
-          <span>Employed</span>
-          <span style={styles.value}>{stats.population.employed}</span>
-        </div>
-        <div style={styles.stat}>
-          <span>Happiness</span>
-          <span style={styles.value}>{stats.population.averageHappiness.toFixed(0)}%</span>
-        </div>
-        <div style={styles.progressBar}>
-          <div
-            style={{
-              ...styles.progressFill,
-              width: `${stats.population.averageHappiness}%`,
-              backgroundColor: getHappinessColor(stats.population.averageHappiness)
-            }}
-          />
-        </div>
+      <div style={styles.demandGroup}>
+        <DemandBar label="I" value={stats.zones.industrialDemand} color="#FDD123" />
+        <DemandBar label="R" value={stats.zones.residentialDemand} color="#0ECC63" />
+        <DemandBar label="C" value={stats.zones.commercialDemand} color="#15BDFF" />
       </div>
+    </div>
+  )
+}
 
-      {/* Treasury */}
-      <div style={styles.section}>
-        <div style={styles.sectionTitle}>Treasury</div>
-        <div style={styles.stat}>
-          <span>Balance</span>
-          <span style={{
-            ...styles.value,
-            color: stats.treasury.balance < 0 ? "#ef5350" : "#4caf50"
-          }}>
-            ${stats.treasury.balance.toLocaleString()}
-          </span>
-        </div>
-        <div style={styles.stat}>
-          <span>Income</span>
-          <span style={{ ...styles.value, color: "#4caf50" }}>
-            +${stats.treasury.lastIncome.toLocaleString()}
-          </span>
-        </div>
-        <div style={styles.stat}>
-          <span>Expenses</span>
-          <span style={{ ...styles.value, color: "#ef5350" }}>
-            -${stats.treasury.lastExpenses.toLocaleString()}
-          </span>
-        </div>
-      </div>
+const getHappinessTone = (happiness: number): "green" | "yellow" | "red" => {
+  if (happiness >= 70) return "green"
+  if (happiness >= 40) return "yellow"
+  return "red"
+}
 
-      {/* Zone Demand */}
-      <div style={styles.section}>
-        <div style={styles.sectionTitle}>Demand</div>
-        <DemandBar label="R" value={stats.zones.residentialDemand} color="#4caf50" />
-        <DemandBar label="C" value={stats.zones.commercialDemand} color="#2196f3" />
-        <DemandBar label="I" value={stats.zones.industrialDemand} color="#ffc107" />
-      </div>
+const toneColors = {
+  green: { bg: "rgba(14, 204, 99, 0.22)", fg: "#057D3A" },
+  yellow: { bg: "rgba(253, 209, 35, 0.13)", fg: "#FF6F00" },
+  red: { bg: "rgba(255, 54, 54, 0.18)", fg: "#FF3636" }
+} as const
 
-      {/* Grid Stats */}
-      <div style={styles.section}>
-        <div style={styles.sectionTitle}>Grid</div>
-        <div style={styles.stat}>
-          <span>Roads</span>
-          <span style={styles.value}>{stats.grid.roadCells}</span>
-        </div>
-        <div style={styles.stat}>
-          <span>Buildings</span>
-          <span style={styles.value}>{stats.grid.buildingCells}</span>
-        </div>
-      </div>
-
-      {/* Metrics Graph Button */}
-      <button
-        style={styles.graphButton}
-        onClick={() => {
-          console.log("Button clicked!")
-          onToggleGraphs()
+const StatColumn: React.FC<{
+  tone: "green" | "yellow" | "red"
+  icon: (color: string) => React.ReactNode
+  value: string
+  delta: string
+  deltaUp: boolean
+}> = ({ tone, icon, value, delta, deltaUp }) => {
+  const colors = deltaUp ? toneColors[tone] : toneColors.red
+  return (
+    <div style={styles.statColumn}>
+      <div
+        style={{
+          ...styles.pill,
+          background: colors.bg
         }}
       >
-        View Metrics Graphs
-      </button>
+        <div style={styles.pillIcon}>{icon(colors.fg)}</div>
+        <div style={{ ...styles.pillValue, color: colors.fg }}>{value}</div>
+      </div>
+      <div style={styles.deltaRow}>
+        <CaretIcon up={deltaUp} color={deltaUp ? "#494949" : "#FF3636"} />
+        <span style={{ ...styles.deltaText, color: deltaUp ? "#494949" : "#FF3636" }}>{delta}</span>
+      </div>
     </div>
   )
 }
@@ -147,158 +125,158 @@ const DemandBar: React.FC<{ label: string; value: number; color: string }> = ({
   label,
   value,
   color
-}) => (
-  <div style={styles.demandRow}>
-    <span style={{ ...styles.demandLabel, color }}>{label}</span>
-    <div style={styles.demandBar}>
-      <div
-        style={{
-          ...styles.demandFill,
-          width: `${value}%`,
-          backgroundColor: color
-        }}
-      />
+}) => {
+  const clamped = Math.max(0, Math.min(100, value))
+  return (
+    <div style={styles.demandColumn}>
+      <div style={styles.demandTrack}>
+        <div style={{ ...styles.demandFill, height: `${clamped}%`, backgroundColor: color }} />
+      </div>
+      <div style={styles.demandLabel}>{label}</div>
     </div>
-    <span style={styles.demandValue}>{value.toFixed(0)}</span>
-  </div>
-)
-
-const getHappinessColor = (happiness: number): string => {
-  if (happiness >= 70) return "#4caf50"
-  if (happiness >= 40) return "#ffc107"
-  return "#ef5350"
+  )
 }
+
+const formatCompactFixed = (value: number): string => {
+  const abs = Math.abs(value)
+  const negative = value < 0
+
+  const unit =
+    abs >= 1_000_000_000 ? { divisor: 1_000_000_000, suffix: "B" }
+      : abs >= 1_000_000 ? { divisor: 1_000_000, suffix: "M" }
+        : abs >= 1_000 ? { divisor: 1_000, suffix: "K" }
+          : null
+
+  if (!unit) {
+    const raw = `${Math.round(value)}`
+    return raw.length > 4 ? raw.slice(0, 4) : raw
+  }
+
+  const num = abs / unit.divisor
+  const maxDigits = 4 - (negative ? 1 : 0) - unit.suffix.length
+  let formatted = (negative || num >= 10)
+    ? Math.round(num).toString()
+    : num.toFixed(1).replace(/\.0$/, "")
+
+  if (formatted.length > maxDigits) {
+    const cap = Math.max(1, Math.pow(10, maxDigits) - 1)
+    formatted = Math.min(cap, Math.floor(num)).toString()
+  }
+
+  let result = `${formatted}${unit.suffix}`
+  if (negative) {
+    result = `-${result}`
+  }
+
+  return result.length > 4 ? result.slice(0, 4) : result
+}
+
+const formatDelta = (value: number, isPercent = false): string => {
+  const formatted = formatCompactFixed(Math.abs(value))
+  return isPercent ? `${formatted}%` : formatted
+}
+
+const CaretIcon: React.FC<{ up: boolean; color: string }> = ({ up, color }) => (
+  up
+    ? <CaretUp size={15} weight="fill" color={color} aria-hidden="true" />
+    : <CaretDown size={15} weight="fill" color={color} aria-hidden="true" />
+)
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    position: "fixed",
-    top: 16,
-    left: 16,
-    width: 220,
-    padding: 16,
-    backgroundColor: "rgba(26, 26, 46, 0.9)",
-    borderRadius: 8,
-    color: "#fff",
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    fontSize: 13
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 38,
+    padding: 0,
+    height: 46,
+    width: 368,
+    pointerEvents: "none"
   },
   loading: {
-    textAlign: "center",
-    color: "#888"
+    fontSize: 12,
+    fontFamily: "Inter, system-ui, sans-serif",
+    color: "#666"
   },
-  title: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 12,
-    color: "#fff"
-  },
-  section: {
-    marginBottom: 12,
-    paddingBottom: 12,
-    borderBottom: "1px solid rgba(255,255,255,0.1)"
-  },
-  sectionTitle: {
-    fontSize: 11,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    color: "#888",
-    marginBottom: 8
-  },
-  row: {
+  statGroup: {
     display: "flex",
-    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 20
+  },
+  statColumn: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    justifyContent: "flex-end",
+    gap: 3
+  },
+  pill: {
+    display: "flex",
     alignItems: "center",
-    marginBottom: 8
+    gap: 7,
+    padding: "2px 10px 2px 4px",
+    borderRadius: 34,
+    width: 86,
+    height: 28
   },
-  button: {
-    padding: "6px 12px",
-    backgroundColor: "#333",
-    border: "none",
-    borderRadius: 4,
-    color: "#fff",
-    cursor: "pointer",
-    fontSize: 12
-  },
-  speedButtons: {
+  pillIcon: {
     display: "flex",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  pillValue: {
+    flex: 1,
+    fontFamily: "Inter, system-ui, sans-serif",
+    fontSize: 18,
+    lineHeight: "22px",
+    color: "#000",
+    fontWeight: 400,
+    textAlign: "right"
+  },
+  deltaRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    height: 15
+  },
+  deltaText: {
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    fontSize: 11,
+    lineHeight: "14px",
+    color: "#494949"
+  },
+  demandGroup: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 4,
+    paddingLeft: 8
+  },
+  demandColumn: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
     gap: 4
   },
-  speedButton: {
-    padding: "4px 8px",
-    backgroundColor: "#333",
-    border: "none",
-    borderRadius: 4,
-    color: "#888",
-    cursor: "pointer",
-    fontSize: 11
-  },
-  speedButtonActive: {
-    backgroundColor: "#4caf50",
-    color: "#fff"
-  },
-  label: {
-    fontSize: 11,
-    color: "#888"
-  },
-  stat: {
-    display: "flex",
-    justifyContent: "space-between",
-    marginBottom: 4
-  },
-  value: {
-    fontWeight: "bold",
-    fontVariantNumeric: "tabular-nums"
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: "#333",
+  demandTrack: {
+    width: 13,
+    height: 28,
+    background: "#EDEDED",
     borderRadius: 2,
-    overflow: "hidden",
-    marginTop: 4
-  },
-  progressFill: {
-    height: "100%",
-    transition: "width 0.3s ease"
-  },
-  demandRow: {
-    display: "flex",
-    alignItems: "center",
-    marginBottom: 4
-  },
-  demandLabel: {
-    width: 16,
-    fontWeight: "bold"
-  },
-  demandBar: {
-    flex: 1,
-    height: 8,
-    backgroundColor: "#333",
-    borderRadius: 2,
-    overflow: "hidden",
-    marginLeft: 8,
-    marginRight: 8
+    position: "relative",
+    overflow: "hidden"
   },
   demandFill: {
-    height: "100%",
-    transition: "width 0.3s ease"
+    position: "absolute",
+    left: 0,
+    bottom: 0,
+    width: "100%"
   },
-  demandValue: {
-    width: 24,
-    textAlign: "right",
-    fontSize: 11,
-    color: "#888"
-  },
-  graphButton: {
-    width: "100%",
-    padding: "10px 12px",
-    backgroundColor: "#2196f3",
-    border: "none",
-    borderRadius: 6,
-    color: "#fff",
-    cursor: "pointer",
-    fontSize: 12,
-    fontWeight: "bold",
-    marginTop: 4,
-    transition: "background-color 0.2s"
+  demandLabel: {
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    fontSize: 10,
+    lineHeight: "13px",
+    color: "#000"
   }
 }
