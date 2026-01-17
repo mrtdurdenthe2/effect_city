@@ -11,6 +11,8 @@ export type EmploymentStatus = typeof EmploymentStatus.Type
 
 export class Citizen extends Schema.Class<Citizen>("Citizen")({
   id: CitizenId,
+  firstName: Schema.String,
+  lastName: Schema.String,
   homeId: Schema.Option(BuildingId),
   workplaceId: Schema.Option(BuildingId),
   employment: EmploymentStatus,
@@ -20,9 +22,15 @@ export class Citizen extends Schema.Class<Citizen>("Citizen")({
   ),
   age: Schema.Number.pipe(Schema.int(), Schema.positive())
 }) {
-  static homeless(id: CitizenId, age: number, happiness: number = 50): Citizen {
+  get fullName(): string {
+    return `${this.firstName} ${this.lastName}`
+  }
+
+  static homeless(id: CitizenId, firstName: string, lastName: string, age: number, happiness: number = 50): Citizen {
     return new Citizen({
       id,
+      firstName,
+      lastName,
       homeId: Option.none(),
       workplaceId: Option.none(),
       employment: "unemployed",

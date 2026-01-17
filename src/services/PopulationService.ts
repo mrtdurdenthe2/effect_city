@@ -1,5 +1,6 @@
 import { Context, Effect, Layer, Ref, Array, Option, Random, Metric, MetricBoundaries } from "effect"
 import { Citizen, CitizenId, BuildingId, PopulationStats } from "../domain/Citizen.js"
+import { FIRST_NAMES, LAST_NAMES } from "../domain/Names.js"
 import { withServiceSpan } from "./ServiceTrace.js"
 
 // Metrics for population tracking
@@ -59,10 +60,20 @@ const generateCitizenId: Effect.Effect<CitizenId> = Effect.map(
   (n) => `citizen-${Date.now()}-${Math.floor(n * 10000)}` as CitizenId
 )
 
+const generateRandomName: Effect.Effect<{ firstName: string; lastName: string }> = Effect.gen(function* () {
+  const firstNameIdx = yield* Random.nextIntBetween(0, FIRST_NAMES.length)
+  const lastNameIdx = yield* Random.nextIntBetween(0, LAST_NAMES.length)
+  return {
+    firstName: FIRST_NAMES[firstNameIdx],
+    lastName: LAST_NAMES[lastNameIdx]
+  }
+})
+
 const createNewCitizen: Effect.Effect<Citizen> = Effect.gen(function* () {
   const id = yield* generateCitizenId
+  const { firstName, lastName } = yield* generateRandomName
   const age = yield* Random.nextIntBetween(18, 65)
-  return Citizen.homeless(id, age, 50)
+  return Citizen.homeless(id, firstName, lastName, age, 50)
 })
 
 const updateMetrics = (citizens: ReadonlyArray<Citizen>): Effect.Effect<void> =>

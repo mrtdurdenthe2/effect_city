@@ -6,7 +6,7 @@ import { ActivityPanel } from "./components/activity-panel"
 import { Application } from "./Application.js"
 import { StatsPanel } from "./ui/StatsPanel"
 import { MetricsGraphPanel } from "./ui/MetricsGraphPanel"
-import type { SerializedSimulationStats, ClockState, ServerMessage, MetricsSnapshot, ActivityItem } from "../shared/MessageProtocol.js"
+import type { SerializedSimulationStats, ServerMessage, MetricsSnapshot, ActivityItem } from "../shared/MessageProtocol.js"
 
 // Max number of activity items to keep in the list
 const MAX_ACTIVITY_ITEMS = 100
@@ -15,7 +15,6 @@ function ThreeCanvas({ onActivityEvent }: { onActivityEvent: (item: ActivityItem
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const appRef = useRef<Application | null>(null)
   const [stats, setStats] = useState<SerializedSimulationStats | null>(null)
-  const [clock, setClock] = useState<ClockState | null>(null)
   const [showGraphs, setShowGraphs] = useState(false)
   const [metricsSnapshots, setMetricsSnapshots] = useState<MetricsSnapshot[]>([])
   const [metricNames, setMetricNames] = useState<string[]>([])
@@ -32,11 +31,8 @@ function ThreeCanvas({ onActivityEvent }: { onActivityEvent: (item: ActivityItem
       const message = event.data
       if (message.type === "initial_state") {
         setStats(message.stats)
-        setClock(message.clock)
       } else if (message.type === "simulation_tick") {
         setStats(message.stats)
-      } else if (message.type === "clock_state") {
-        setClock(message.clock)
       } else if (message.type === "metrics_history") {
         console.log("Received metrics history:", message.snapshots.length, "snapshots")
         setMetricsSnapshots([...message.snapshots])
@@ -67,40 +63,15 @@ function ThreeCanvas({ onActivityEvent }: { onActivityEvent: (item: ActivityItem
     }
   }, [onActivityEvent])
 
-  const handleTogglePause = () => {
-    appRef.current?.simulation.togglePause()
-  }
-
-  const handleSetSpeed = (speed: 1 | 2 | 3) => {
-    appRef.current?.simulation.setSpeed(speed)
-  }
-
-  const handleToggleGraphs = useCallback(() => {
-    console.log("Toggle graphs clicked, showGraphs:", showGraphs)
-    if (!showGraphs) {
-      console.log("Requesting metrics history...")
-      appRef.current?.simulation.requestMetricsHistory(200)
-    }
-    setShowGraphs(prev => !prev)
-  }, [showGraphs])
-
   const handleCloseGraphs = useCallback(() => {
     setShowGraphs(false)
   }, [])
 
   return (
-    <div className="relative w-full h-full bg-[#1a1a2e]">
+    <div className="relative w-full h-full bg-white">
       <canvas ref={canvasRef} className="w-full h-full" />
-      <div className="absolute top-0 left-0 pointer-events-none">
-        <div className="pointer-events-auto">
-          <StatsPanel
-            stats={stats}
-            clock={clock}
-            onTogglePause={handleTogglePause}
-            onSetSpeed={handleSetSpeed}
-            onToggleGraphs={handleToggleGraphs}
-          />
-        </div>
+      <div className="absolute top-0 right-0 pt-3 pr-3 pointer-events-none">
+        <StatsPanel stats={stats} />
       </div>
       {showGraphs && (
         <MetricsGraphPanel

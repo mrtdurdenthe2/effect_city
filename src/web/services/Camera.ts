@@ -4,14 +4,14 @@ import type { EventEmitter } from "../EventEmitter.js"
 import type { Sizes } from "./Sizes.js"
 
 // Grid dimensions from backend
-const GRID_SIZE = 64
+const GRID_SIZE = 128
 const GRID_CENTER = new Vector3(GRID_SIZE / 2, 0, GRID_SIZE / 2)
 
 export class Camera {
   readonly instance: OrthographicCamera
   readonly controls: OrbitControls
 
-  private frustumSize = 50
+  private frustumSize = 100
 
   constructor(
     private readonly eventEmitter: EventEmitter,
@@ -30,7 +30,7 @@ export class Camera {
     )
 
     // Position camera for isometric view
-    const distance = 80
+    const distance = 160
     this.instance.position.set(
       GRID_CENTER.x + distance,
       distance * 0.8,

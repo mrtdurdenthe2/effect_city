@@ -153,6 +153,65 @@ export const CitizensLeftEvent = Schema.TaggedStruct("CitizensLeft", {
   reason: Schema.Literal("unhappy", "homeless", "unemployed")
 })
 
+// Affected citizen info for chaos events
+export const AffectedCitizenInfo = Schema.Struct({
+  id: Schema.String,
+  firstName: Schema.String,
+  lastName: Schema.String,
+  age: Schema.Number,
+  wasEmployed: Schema.Boolean,
+  hadHome: Schema.Boolean
+})
+export type AffectedCitizenInfo = typeof AffectedCitizenInfo.Type
+
+// Chaos events
+export const CarCrashEvent = Schema.TaggedStruct("CarCrash", {
+  eventId: Schema.String,
+  severity: Schema.Literal("minor", "moderate", "major"),
+  position: Schema.Struct({ x: Schema.Number, y: Schema.Number }),
+  roadType: Schema.OptionFromNullOr(Schema.Literal("street", "avenue", "highway")),
+  affectedCitizens: Schema.Array(AffectedCitizenInfo)
+})
+
+export const CitizenAccidentEvent = Schema.TaggedStruct("CitizenAccident", {
+  eventId: Schema.String,
+  severity: Schema.Literal("minor", "moderate", "major"),
+  position: Schema.Struct({ x: Schema.Number, y: Schema.Number }),
+  affectedCitizens: Schema.Array(AffectedCitizenInfo)
+})
+
+export const CitizenIllnessEvent = Schema.TaggedStruct("CitizenIllness", {
+  eventId: Schema.String,
+  severity: Schema.Literal("minor", "moderate", "major"),
+  affectedCitizens: Schema.Array(AffectedCitizenInfo)
+})
+
+export const PowerOutageEvent = Schema.TaggedStruct("PowerOutage", {
+  eventId: Schema.String,
+  severity: Schema.Literal("minor", "moderate", "major"),
+  position: Schema.Struct({ x: Schema.Number, y: Schema.Number }),
+  affectedCitizens: Schema.Array(AffectedCitizenInfo)
+})
+
+export const WaterMainBreakEvent = Schema.TaggedStruct("WaterMainBreak", {
+  eventId: Schema.String,
+  severity: Schema.Literal("minor", "moderate", "major"),
+  position: Schema.Struct({ x: Schema.Number, y: Schema.Number }),
+  affectedCitizens: Schema.Array(AffectedCitizenInfo)
+})
+
+export const FireEvent = Schema.TaggedStruct("Fire", {
+  eventId: Schema.String,
+  severity: Schema.Literal("minor", "moderate", "major"),
+  position: Schema.Struct({ x: Schema.Number, y: Schema.Number }),
+  affectedCitizens: Schema.Array(AffectedCitizenInfo)
+})
+
+export const ChaosResolvedEvent = Schema.TaggedStruct("ChaosResolved", {
+  eventId: Schema.String,
+  eventType: Schema.Literal("car_crash", "citizen_accident", "citizen_illness", "power_outage", "water_main_break", "fire")
+})
+
 // Combined ActivityEvent union - add new event types here
 export const ActivityEvent = Schema.Union(
   BusinessCreatedEvent,
@@ -161,7 +220,14 @@ export const ActivityEvent = Schema.Union(
   ExitedDebtEvent,
   BankruptEvent,
   CitizensArrivedEvent,
-  CitizensLeftEvent
+  CitizensLeftEvent,
+  CarCrashEvent,
+  CitizenAccidentEvent,
+  CitizenIllnessEvent,
+  PowerOutageEvent,
+  WaterMainBreakEvent,
+  FireEvent,
+  ChaosResolvedEvent
 )
 export type ActivityEvent = typeof ActivityEvent.Type
 

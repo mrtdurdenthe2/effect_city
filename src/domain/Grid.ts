@@ -122,8 +122,8 @@ export class GridCell extends Schema.Class<GridCell>("GridCell")({
 }
 
 // Grid dimensions
-export const DEFAULT_GRID_WIDTH = 64
-export const DEFAULT_GRID_HEIGHT = 64
+export const DEFAULT_GRID_WIDTH = 128
+export const DEFAULT_GRID_HEIGHT = 128
 
 // Grid statistics
 export class GridStats extends Schema.Class<GridStats>("GridStats")({

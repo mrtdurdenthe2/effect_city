@@ -4,8 +4,10 @@ import { GameLoop, GameLoopLive } from "../core/GameLoop.js"
 import { PopulationService, PopulationServiceLive } from "./PopulationService.js"
 import { EconomyService, EconomyServiceLive, type BuildingCounts } from "./EconomyService.js"
 import { BusinessService, BusinessServiceLive } from "./BusinessService.js"
+import { ChaosService, ChaosServiceLive } from "./ChaosService.js"
 import { GridServiceLive } from "./GridService.js"
 import { ZoneServiceLive } from "./ZoneService.js"
+import { RoadServiceLive } from "./RoadService.js"
 import { type PopulationStats, type CitizenId, BuildingId } from "../domain/Citizen.js"
 import { type Treasury, type IncomeReport, type ExpenseReport } from "../domain/Economy.js"
 import { captureActivityTrace, withServiceSpan } from "./ServiceTrace.js"
@@ -75,6 +77,7 @@ export const SimulationServiceLive = Layer.effect(
     const population = yield* PopulationService
     const economy = yield* EconomyService
     const business = yield* BusinessService
+    const chaos = yield* ChaosService
 
     const configRef = yield* Ref.make<SimulationConfig>({
       residentialBuildingIds: [],
@@ -229,7 +232,10 @@ export const SimulationServiceLive = Layer.effect(
       yield* PubSub.publish(eventBus, { _tag: "TaxesCollected", income })
       yield* PubSub.publish(eventBus, { _tag: "ExpensesPaid", expenses })
 
-      // 7. Get final stats
+      // 7. Run chaos simulation (accidents, failures, etc.)
+      yield* chaos.tick(tickCount)
+
+      // 8. Get final stats
       const finalPopStats = yield* population.getStats
       const treasury = yield* economy.getTreasury
 
@@ -317,9 +323,22 @@ const BaseServicesLayer = Layer.mergeAll(
   ZoneServiceLive.pipe(Layer.provide(GridServiceLive))
 )
 
+// Road layer depends on Grid
+const RoadLayer = RoadServiceLive.pipe(
+  Layer.provide(BaseServicesLayer)
+)
+
 // Business layer depends on base services
 const BusinessLayer = BusinessServiceLive.pipe(
   Layer.provide(BaseServicesLayer)
+)
+
+// Chaos layer depends on Population and Road
+const ChaosLayer = ChaosServiceLive.pipe(
+  Layer.provide(Layer.mergeAll(
+    PopulationServiceLive,
+    RoadLayer
+  ))
 )
 
 // Internal layer for SimulationService dependencies
@@ -329,6 +348,8 @@ const SimulationDeps = Layer.mergeAll(
   PopulationServiceLive,
   EconomyServiceLive,
   BusinessLayer,
+  RoadLayer,
+  ChaosLayer,
   BaseServicesLayer
 )
 
@@ -338,5 +359,7 @@ export const SimulationLayer = Layer.mergeAll(
   PopulationServiceLive,
   EconomyServiceLive,
   BusinessLayer,
+  RoadLayer,
+  ChaosLayer,
   BaseServicesLayer
 )

@@ -3,7 +3,7 @@ import {
   InstancedMesh,
   PlaneGeometry,
   BoxGeometry,
-  MeshBasicMaterial,
+  MeshStandardMaterial,
   Matrix4,
   Color
 } from "three"
@@ -16,16 +16,16 @@ const ZONE_COLORS = {
 } as const
 
 const CELL_COLORS = {
-  empty: 0x2a2a3e,
-  road: 0x555555,
+  empty: 0xffffff,
+  road: 0xcccccc,
   building: 0x888888
 } as const
 
 // Road type colors
 const ROAD_COLORS = {
-  street: 0x555555,  // Dark gray
-  avenue: 0x666666,  // Medium gray
-  highway: 0x777777  // Light gray
+  street: 0xcccccc,  // Light gray
+  avenue: 0xd0d0d0,  // Light gray (slightly brighter)
+  highway: 0xd6d6d6  // Light gray (brightest)
 } as const
 
 type RoadType = "street" | "avenue" | "highway"
@@ -33,7 +33,7 @@ type RoadType = "street" | "avenue" | "highway"
 type ZoneType = "residential" | "commercial" | "industrial"
 type CellContentType = "empty" | "road" | "zone" | "building"
 
-const GRID_SIZE = 64
+const GRID_SIZE = 128
 const CELL_SIZE = 1
 const CELL_GAP = 0.02
 
@@ -63,9 +63,10 @@ export class GridRenderer {
     planeGeometry.rotateX(-Math.PI / 2) // Lay flat
 
     // Create instanced mesh for base cells
-    const planeMaterial = new MeshBasicMaterial({ color: CELL_COLORS.empty })
+    const planeMaterial = new MeshStandardMaterial({ color: CELL_COLORS.empty })
     this.basePlane = new InstancedMesh(planeGeometry, planeMaterial, GRID_SIZE * GRID_SIZE)
     this.basePlane.name = "GridCells"
+    this.basePlane.receiveShadow = true
 
     // Create building geometry
     const buildingGeometry = new BoxGeometry(
@@ -76,10 +77,16 @@ export class GridRenderer {
     buildingGeometry.translate(0, 0.5, 0) // Move origin to bottom
 
     // Create instanced mesh for buildings
-    const buildingMaterial = new MeshBasicMaterial({ color: 0x888888 })
+    const buildingMaterial = new MeshStandardMaterial({ color: 0x888888 })
     this.buildings = new InstancedMesh(buildingGeometry, buildingMaterial, GRID_SIZE * GRID_SIZE)
     this.buildings.name = "Buildings"
     this.buildings.count = 0 // Start with no buildings visible
+    this.buildings.castShadow = true
+    this.buildings.receiveShadow = true
+
+    // Disable frustum culling to prevent buildings disappearing at certain angles
+    this.basePlane.frustumCulled = false
+    this.buildings.frustumCulled = false
 
     // Initialize grid
     this.initializeGrid()
@@ -211,11 +218,11 @@ export class GridRenderer {
 
   dispose(): void {
     this.basePlane.geometry.dispose()
-    ;(this.basePlane.material as MeshBasicMaterial).dispose()
+    ;(this.basePlane.material as MeshStandardMaterial).dispose()
     this.scene.remove(this.basePlane)
 
     this.buildings.geometry.dispose()
-    ;(this.buildings.material as MeshBasicMaterial).dispose()
+    ;(this.buildings.material as MeshStandardMaterial).dispose()
     this.scene.remove(this.buildings)
   }
 }
