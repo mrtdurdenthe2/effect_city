@@ -72,7 +72,10 @@ export function ResizableLayout({
   return (
     <div ref={containerRef} className="flex h-screen w-full p-[5px] gap-[5px]">
       {/* Left Panel */}
-      <div className="h-full overflow-hidden rounded-[8px]" style={{ width: `${leftWidth}%` }}>
+      <div
+        className="h-full overflow-hidden rounded-[8px]"
+        style={{ width: `${leftWidth}%`, border: "2px solid rgba(0, 0, 0, 0.1)" }}
+      >
         {leftPanel}
       </div>
 

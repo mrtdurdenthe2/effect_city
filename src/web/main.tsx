@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client"
 import "./globals.css"
 import { ResizableLayout } from "./components/resizable-layout"
 import { ActivityPanel } from "./components/activity-panel"
+import { ChaosOverlay } from "./components/chaos-overlay"
 import { Application } from "./Application.js"
 import { StatsPanel } from "./ui/StatsPanel"
 import { MetricsGraphPanel } from "./ui/MetricsGraphPanel"
@@ -14,6 +15,7 @@ const MAX_ACTIVITY_ITEMS = 100
 function ThreeCanvas({ onActivityEvent }: { onActivityEvent: (item: ActivityItem) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const appRef = useRef<Application | null>(null)
+  const [app, setApp] = useState<Application | null>(null)
   const [stats, setStats] = useState<SerializedSimulationStats | null>(null)
   const [showGraphs, setShowGraphs] = useState(false)
   const [metricsSnapshots, setMetricsSnapshots] = useState<MetricsSnapshot[]>([])
@@ -23,8 +25,9 @@ function ThreeCanvas({ onActivityEvent }: { onActivityEvent: (item: ActivityItem
   useEffect(() => {
     if (!canvasRef.current || appRef.current) return
 
-    const app = Application.createWithCanvas(canvasRef.current)
-    appRef.current = app
+    const newApp = Application.createWithCanvas(canvasRef.current)
+    appRef.current = newApp
+    setApp(newApp)
 
     // Subscribe to simulation updates
     const handleMessage = (event: { type: "server:message"; data: ServerMessage }) => {
@@ -49,17 +52,18 @@ function ThreeCanvas({ onActivityEvent }: { onActivityEvent: (item: ActivityItem
       }
     }
 
-    const unsubscribe = app.eventEmitter.on("server:message", handleMessage)
+    const unsubscribe = newApp.eventEmitter.on("server:message", handleMessage)
 
     // Start the application
-    app.start()
+    newApp.start()
     console.log("Effect City visualization started")
     console.log("Connecting to server...")
 
     return () => {
       unsubscribe()
-      app.dispose()
+      newApp.dispose()
       appRef.current = null
+      setApp(null)
     }
   }, [onActivityEvent])
 
@@ -70,8 +74,11 @@ function ThreeCanvas({ onActivityEvent }: { onActivityEvent: (item: ActivityItem
   return (
     <div className="relative w-full h-full bg-white">
       <canvas ref={canvasRef} className="w-full h-full" />
-      <div className="absolute top-0 right-0 pt-3 pr-3 pointer-events-none">
-        <StatsPanel stats={stats} />
+      <ChaosOverlay app={app} />
+      <div className="absolute top-0 left-0 right-0 pointer-events-none">
+        <div className="bg-white border-b border-black/[0.08] px-4 py-2 flex justify-end">
+          <StatsPanel stats={stats} />
+        </div>
       </div>
       {showGraphs && (
         <MetricsGraphPanel

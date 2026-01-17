@@ -1,7 +1,10 @@
 import { AmbientLight, DirectionalLight, PlaneGeometry, MeshStandardMaterial, Mesh } from "three"
 import type { Application } from "../Application.js"
 import { GridRenderer } from "./GridRenderer.js"
-import type { ServerMessage, SerializedCell } from "../../shared/MessageProtocol.js"
+import type { ServerMessage, SerializedCell, ActivityEvent } from "../../shared/MessageProtocol.js"
+
+// Chaos event types that have positions
+const CHAOS_EVENT_TYPES = ["CarCrash", "Fire", "PowerOutage", "WaterMainBreak", "CitizenAccident"] as const
 
 export class World {
   private readonly app: Application
@@ -78,6 +81,28 @@ export class World {
       case "clock_state":
         // Clock state is handled by UI overlay
         break
+
+      case "activity_event":
+        this.handleActivityEvent(message.event)
+        break
+    }
+  }
+
+  private handleActivityEvent(event: ActivityEvent): void {
+    // Handle chaos events with positions
+    if (CHAOS_EVENT_TYPES.includes(event._tag as typeof CHAOS_EVENT_TYPES[number])) {
+      const chaosEvent = event as { _tag: string; eventId: string; severity: "minor" | "moderate" | "major"; position: { x: number; y: number } }
+      this.gridRenderer.addChaosMarker(
+        chaosEvent.eventId,
+        chaosEvent.position.x,
+        chaosEvent.position.y,
+        chaosEvent.severity
+      )
+    }
+
+    // Handle resolved events
+    if (event._tag === "ChaosResolved") {
+      this.gridRenderer.removeChaosMarker(event.eventId)
     }
   }
 
@@ -104,7 +129,8 @@ export class World {
   }
 
   update(): void {
-    // Future: animate buildings, effects, etc.
+    // Animate chaos markers
+    this.gridRenderer.updateChaosMarkers()
   }
 
   dispose(): void {

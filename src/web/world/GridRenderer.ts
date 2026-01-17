@@ -4,8 +4,10 @@ import {
   PlaneGeometry,
   BoxGeometry,
   MeshStandardMaterial,
+  MeshBasicMaterial,
   Matrix4,
-  Color
+  Color,
+  Vector3
 } from "three"
 
 // Zone colors from backend
@@ -33,6 +35,26 @@ type RoadType = "street" | "avenue" | "highway"
 type ZoneType = "residential" | "commercial" | "industrial"
 type CellContentType = "empty" | "road" | "zone" | "building"
 
+// Chaos marker colors by severity
+const CHAOS_COLORS = {
+  minor: 0xff9800,    // Orange
+  moderate: 0xff5722, // Deep orange
+  major: 0xf44336    // Red
+} as const
+
+type ChaosSeverity = "minor" | "moderate" | "major"
+
+interface ChaosMarker {
+  eventId: string
+  x: number
+  y: number
+  severity: ChaosSeverity
+  index: number
+  createdAt: number
+}
+
+const MAX_CHAOS_MARKERS = 50
+
 const GRID_SIZE = 128
 const CELL_SIZE = 1
 const CELL_GAP = 0.02
@@ -43,13 +65,22 @@ export class GridRenderer {
   // Instanced meshes for each cell type
   private readonly basePlane: InstancedMesh
   private readonly buildings: InstancedMesh
+  private readonly chaosMarkers: InstancedMesh
 
   // Cell state tracking
   private readonly cellStates: Map<string, { type: CellContentType; zoneType: ZoneType | undefined; roadType: RoadType | undefined }>
 
+  // Chaos marker tracking
+  private readonly activeMarkers: Map<string, ChaosMarker> = new Map()
+  private markerIndexPool: number[] = []
+
   // Helper matrices
   private readonly tempMatrix = new Matrix4()
   private readonly tempColor = new Color()
+
+  // Dedicated matrix for chaos marker animation (to avoid corrupting tempMatrix)
+  private readonly chaosMatrix = new Matrix4()
+  private readonly chaosScale = new Vector3()
 
   constructor(scene: Scene) {
     this.scene = scene
@@ -88,12 +119,30 @@ export class GridRenderer {
     this.basePlane.frustumCulled = false
     this.buildings.frustumCulled = false
 
+    // Create chaos marker geometry (small cube)
+    const chaosGeometry = new BoxGeometry(0.4, 0.4, 0.4)
+    const chaosMaterial = new MeshBasicMaterial({
+      color: 0xff0000,
+      transparent: true,
+      opacity: 0.9
+    })
+    this.chaosMarkers = new InstancedMesh(chaosGeometry, chaosMaterial, MAX_CHAOS_MARKERS)
+    this.chaosMarkers.name = "ChaosMarkers"
+    this.chaosMarkers.count = 0
+    this.chaosMarkers.frustumCulled = false
+
+    // Initialize marker index pool
+    for (let i = 0; i < MAX_CHAOS_MARKERS; i++) {
+      this.markerIndexPool.push(i)
+    }
+
     // Initialize grid
     this.initializeGrid()
 
     // Add to scene
     this.scene.add(this.basePlane)
     this.scene.add(this.buildings)
+    this.scene.add(this.chaosMarkers)
   }
 
   private initializeGrid(): void {
@@ -216,6 +265,95 @@ export class GridRenderer {
     }
   }
 
+  // Chaos marker methods
+  addChaosMarker(eventId: string, x: number, y: number, severity: ChaosSeverity): void {
+    // Don't add if already exists
+    if (this.activeMarkers.has(eventId)) return
+
+    // Get an available index
+    if (this.markerIndexPool.length === 0) {
+      console.warn("Max chaos markers reached")
+      return
+    }
+
+    const index = this.markerIndexPool.pop()!
+    const marker: ChaosMarker = {
+      eventId,
+      x,
+      y,
+      severity,
+      index,
+      createdAt: performance.now()
+    }
+
+    this.activeMarkers.set(eventId, marker)
+
+    // Position the marker (elevated above grid) - use dedicated chaosMatrix
+    this.chaosMatrix.identity()
+    this.chaosMatrix.setPosition(
+      x + CELL_SIZE / 2,
+      0.5,
+      y + CELL_SIZE / 2
+    )
+    this.chaosMarkers.setMatrixAt(index, this.chaosMatrix)
+
+    // Set color based on severity
+    this.tempColor.setHex(CHAOS_COLORS[severity])
+    this.chaosMarkers.setColorAt(index, this.tempColor)
+
+    // Update instance count and matrices
+    this.chaosMarkers.count = Math.max(this.chaosMarkers.count, index + 1)
+    this.chaosMarkers.instanceMatrix.needsUpdate = true
+    if (this.chaosMarkers.instanceColor) {
+      this.chaosMarkers.instanceColor.needsUpdate = true
+    }
+  }
+
+  removeChaosMarker(eventId: string): void {
+    const marker = this.activeMarkers.get(eventId)
+    if (!marker) return
+
+    // Return index to pool
+    this.markerIndexPool.push(marker.index)
+    this.activeMarkers.delete(eventId)
+
+    // Hide the marker by scaling to 0 (use dedicated chaosMatrix to avoid corrupting tempMatrix)
+    this.chaosMatrix.makeScale(0, 0, 0)
+    this.chaosMarkers.setMatrixAt(marker.index, this.chaosMatrix)
+    this.chaosMarkers.instanceMatrix.needsUpdate = true
+  }
+
+  // Animate chaos markers (pulsing effect)
+  updateChaosMarkers(): void {
+    const now = performance.now()
+
+    for (const marker of this.activeMarkers.values()) {
+      // Pulsing animation based on time
+      const elapsed = (now - marker.createdAt) / 1000
+      const pulse = 0.8 + Math.sin(elapsed * 4) * 0.2 // Pulse between 0.6 and 1.0
+      const bounce = Math.abs(Math.sin(elapsed * 2)) * 0.3 // Bounce up and down
+
+      // Update matrix with scale and position (using dedicated chaos matrices)
+      this.chaosMatrix.identity()
+      this.chaosScale.set(pulse, pulse, pulse)
+      this.chaosMatrix.scale(this.chaosScale)
+      this.chaosMatrix.setPosition(
+        marker.x + CELL_SIZE / 2,
+        0.5 + bounce,
+        marker.y + CELL_SIZE / 2
+      )
+      this.chaosMarkers.setMatrixAt(marker.index, this.chaosMatrix)
+    }
+
+    if (this.activeMarkers.size > 0) {
+      this.chaosMarkers.instanceMatrix.needsUpdate = true
+    }
+  }
+
+  getActiveMarkers(): Map<string, ChaosMarker> {
+    return this.activeMarkers
+  }
+
   dispose(): void {
     this.basePlane.geometry.dispose()
     ;(this.basePlane.material as MeshStandardMaterial).dispose()
@@ -224,5 +362,9 @@ export class GridRenderer {
     this.buildings.geometry.dispose()
     ;(this.buildings.material as MeshStandardMaterial).dispose()
     this.scene.remove(this.buildings)
+
+    this.chaosMarkers.geometry.dispose()
+    ;(this.chaosMarkers.material as MeshBasicMaterial).dispose()
+    this.scene.remove(this.chaosMarkers)
   }
 }
